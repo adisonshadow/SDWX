@@ -1,0 +1,18 @@
+{
+  "name": "sdqlj-gjxl",
+  "version": "0.1.0",
+  "private": true,
+  "description": "故检修理线系统 (FMMS) — execution-layer management system for the fault inspection & repair production line",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.23.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream run dev",
+    "build": "pnpm -r run build",
+    "lint": "pnpm -r run lint",
+    "typecheck": "pnpm -r run typecheck",
+    "clean": "pnpm -r exec rm -rf dist node_modules/.cache"
+  }
+}

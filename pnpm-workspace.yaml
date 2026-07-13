@@ -1,0 +1,26 @@
+packages:
+  - admin/backend
+  - admin/frontend
+  - app-workstation-client
+  - app-dashboard
+  - app-notification-reciver
+  - packages/*
+
+onlyBuiltDependencies:
+  - '"'
+  - ','
+  - '['
+  - ']'
+  - b
+  - c
+  - d
+  - e
+  - electron
+  - i
+  - l
+  - n
+  - o
+  - r
+  - s
+  - t
+  - u

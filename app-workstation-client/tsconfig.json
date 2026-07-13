@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "paths": {
+      "@/*": ["./src/*"],
+      "@fmms/shared": ["../packages/shared/src/index.ts"]
+    }
+  },
+  "include": ["src", "../packages/shared/src"]
+}

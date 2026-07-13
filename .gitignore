@@ -1,0 +1,56 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# build output
+dist/
+dist-electron/
+build/
+out/
+*.tsbuildinfo
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# env（敏感文件不提交）
+# backend 的 .env.development/.env.production 含 app_secret/SSO salt，必须忽略
+# frontend/workstation-client 的 env 仅含公开地址，可提交
+.env
+.env.local
+admin/backend/.env
+admin/backend/.env.development
+admin/backend/.env.production
+admin/frontend/.env.development
+admin/frontend/.env.production
+.env.*.local
+!.env.example
+
+# secrets
+*.pem
+credentials.json
+
+# editor / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+*~
+Thumbs.db
+
+# electron
+app-workstation-client/release/
+
+# test / coverage
+coverage/
+.nyc_output/
+
+# caches
+.eslintcache
+.cache/
+.turbo/
+.vite/

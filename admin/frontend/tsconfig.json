@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": true,
+    "useDefineForClassFields": true,
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@/*": ["./src/*"],
+      "@fmms/shared": ["../../packages/shared/src/index.ts"],
+      "@fmms/shared/*": ["../../packages/shared/src/*"]
+    }
+  },
+  "include": ["src", "../../packages/shared/src"]
+}
