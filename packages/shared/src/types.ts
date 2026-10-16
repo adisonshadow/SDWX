@@ -1,6 +1,6 @@
 /**
  * FMMS 共享类型定义
- * 字段严格对齐 EADAF apis.json（6 个已有实体 + 补充实体）
+ * 字段严格对齐 EADAF apis.json
  */
 import type {
   WorkstationType,
@@ -9,8 +9,8 @@ import type {
   DisposalResult,
   InspectionResult,
   CallType,
-  CalleeType,
   StockType,
+  OutsourceStatus,
   WsEventName,
 } from './constants.js';
 
@@ -21,40 +21,40 @@ export interface EadafEnvelope<T> {
   data: T;
 }
 
-/** 分页查询结果 */
+/** 分页查询结果（对齐 apis.json Find 响应 data: { items, total, page, size }） */
 export interface PagedResult<T> {
   items: T[];
   total: number;
+  page?: number;
+  size?: number;
 }
 
-// ============ 已有6实体（字段对齐 apis.json）============
+// ============ 业务实体（对齐 apis.json）============
 
 /** 工卡 */
 export interface WorkCard {
   id?: string;
-  card_code: string; // 工卡编号
-  card_name: string; // 工卡名称
-  station_type: string; // 工位类型
-  wbs_node_id?: string; // WBS节点ID
-  status: WorkCardStatus; // 工卡状态
-  product_code?: string; // 产品编号
-  product_name?: string; // 产品名称
-  batch_no?: string; // 批次号
-  serial_no?: string; // 序列号
-  accept_operator_id?: string; // 接收操作工ID
-  accept_operator_name?: string; // 接收操作工姓名
-  accept_time?: string; // 接收时间
-  start_time?: string; // 开始时间
-  complete_time?: string; // 完成时间
-  progress?: number; // 进度百分比
-  total_parts?: number; // 零件总数
-  qualified_parts?: number; // 合格数
-  unqualified_parts?: number; // 不合格数
-  source?: string; // 来源
-  remark?: string; // 备注
-  current_station_id?: string; // 当前工位ID
-  // 检测结果 JSON 字段（需在 EADAF WorkCard 实体上补充）
-  inspection_result?: InspectionResultData;
+  card_code: string;
+  card_name: string;
+  station_type: string;
+  wbs_node_id?: string;
+  status: WorkCardStatus;
+  product_code?: string;
+  product_name?: string;
+  batch_no?: string;
+  serial_no?: string;
+  accept_operator_id?: string;
+  accept_operator_name?: string;
+  accept_time?: string;
+  start_time?: string;
+  complete_time?: string;
+  progress?: number;
+  total_parts?: number;
+  qualified_parts?: number;
+  unqualified_parts?: number;
+  source?: string;
+  remark?: string;
+  current_station_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -62,12 +62,12 @@ export interface WorkCard {
 /** 工位 */
 export interface Workstation {
   id?: string;
-  station_code: string; // 工位编码
-  station_name: string; // 工位名称
-  station_type: WorkstationType; // 工位类型
-  location?: string; // 位置描述
-  ip_address?: string; // 工位终端IP
-  is_active?: boolean; // 是否启用
+  station_code: string;
+  station_name: string;
+  station_type: WorkstationType;
+  location?: string;
+  ip_address?: string;
+  is_active?: boolean;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -76,17 +76,17 @@ export interface Workstation {
 /** WBS 节点 */
 export interface WbsNode {
   id?: string;
-  wbs_code: string; // WBS编码
-  wbs_name: string; // 节点名称
-  parent_id?: string; // 父节点ID
-  node_level: number; // 层级
-  sort_order?: number; // 排序号
-  process_code?: string; // 工序编码
-  process_name?: string; // 工序名称
-  process_description?: string; // 工艺描述
-  process_resources?: ProcessResource[] | Record<string, unknown>; // 工艺资源（文件/视频）
-  estimated_minutes?: number; // 预计工时(分钟)
-  workstation_type?: string; // 适用工位类型
+  wbs_code: string;
+  wbs_name: string;
+  parent_id?: string;
+  node_level: number;
+  sort_order?: number;
+  process_code?: string;
+  process_name?: string;
+  process_description?: string;
+  process_resources?: ProcessResource[] | Record<string, unknown>;
+  estimated_minutes?: number;
+  workstation_type?: string;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -104,21 +104,48 @@ export interface ProcessResource {
 /** 检测项 */
 export interface InspectionItem {
   id?: string;
-  item_code: string; // 检测项编码
-  item_name: string; // 检测项名称
-  wbs_node_id?: string; // WBS节点ID
-  work_step_id?: string; // 工步ID
-  part_code?: string; // 适用零件编号
-  item_type?: string; // 检测项类型
-  measure_tool_code?: string; // 推荐测量工具
-  nominal_value?: number; // 公称值
-  upper_tolerance?: number; // 上偏差
-  lower_tolerance?: number; // 下偏差
-  unit?: string; // 单位
-  sort_order?: number; // 排序号
-  require_photo?: boolean; // 是否需拍照
-  inspection_method?: string; // 检测方法
-  quality_criteria?: string; // 质量判定标准
+  item_code: string;
+  item_name: string;
+  wbs_node_id?: string;
+  work_step_id?: string;
+  part_code?: string;
+  item_type?: string;
+  measure_tool_code?: string;
+  nominal_value?: number;
+  upper_tolerance?: number;
+  lower_tolerance?: number;
+  unit?: string;
+  sort_order?: number;
+  require_photo?: boolean;
+  inspection_method?: string;
+  quality_criteria?: string;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** 检测记录 */
+export interface InspectionRecord {
+  id?: string;
+  work_card_id?: string;
+  part_id?: string;
+  inspection_item_id?: string;
+  measure_tool_id?: string;
+  measure_tool_code?: string;
+  result?: InspectionResult;
+  measured_value?: number;
+  nominal_value?: number;
+  upper_tolerance?: number;
+  lower_tolerance?: number;
+  unit?: string;
+  is_manual?: boolean;
+  is_overridden?: boolean;
+  operator_id?: string;
+  operator_name?: string;
+  inspect_time?: string;
+  photo_object_id?: string;
+  photo_urls?: Record<string, unknown>;
+  raw_data?: string;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -127,16 +154,17 @@ export interface InspectionItem {
 /** 测量工具 */
 export interface MeasuringTool {
   id?: string;
-  tool_code: string; // 工具编号
-  tool_name: string; // 工具名称
-  tool_model?: string; // 型号规格
-  protocol_type?: string; // 协议类型
-  connection_params?: Record<string, unknown>; // 连接参数（JSON: port/baud_rate/ip 等）
-  status?: string; // 在线状态
-  workstation_id?: string; // 绑定工位
-  last_heartbeat?: string; // 最后心跳时间
-  firmware_version?: string; // 固件版本
-  calibration_date?: string; // 校准日期
+  tool_code: string;
+  tool_name: string;
+  tool_model?: string;
+  protocol_type?: string;
+  connection_params?: Record<string, unknown>;
+  parseTemplate?: Record<string, unknown>;
+  status?: string;
+  workstation_id?: string;
+  last_heartbeat?: string;
+  firmware_version?: string;
+  calibration_date?: string;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -145,33 +173,50 @@ export interface MeasuringTool {
 /** 线边库 */
 export interface LineStock {
   id?: string;
-  stock_code: string; // 线边库编码
-  stock_name: string; // 线边库名称
-  location?: string; // 位置
-  stock_type: StockType; // 线边库存类型
-  is_active?: boolean; // 是否启用
+  stock_code: string;
+  stock_name: string;
+  location?: string;
+  stock_type: StockType;
+  is_active?: boolean;
   remark?: string;
   created_at?: string;
   updated_at?: string;
 }
 
-// ============ 补充实体（待 EADAF 创建）============
+/** 线边库物料 */
+export interface LineStockItem {
+  id?: string;
+  stock_id: string;
+  part_code: string;
+  part_name?: string;
+  quantity: number;
+  min_quantity?: number;
+  max_quantity?: number;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 /** 工卡零部件 */
 export interface WorkCardPart {
   id?: string;
-  card_id: string; // → WorkCard.id
-  part_code: string; // 零件编号
-  part_name: string; // 零件名称
-  quantity: number; // 数量（目标数量）
-  sorted_quantity?: number; // 已分拣清点数量
-  category?: string; // 分组类别
-  status: PartStatus; // 零件状态
-  pass_count?: number; // 合格数
-  fail_count?: number; // 不合格数
-  disposal_result?: DisposalResult; // 处置结果
-  scan_barcode?: string; // 扫码条码
-  wbs_node_id?: string;
+  work_card_id: string;
+  part_code: string;
+  part_name: string;
+  barcode?: string;
+  scan_barcode?: string;
+  category?: string;
+  quantity: number;
+  sorted_quantity?: number;
+  status: PartStatus;
+  disposal_result?: DisposalResult;
+  disposal_operator_id?: string;
+  disposal_operator_name?: string;
+  disposal_time?: string;
+  suggested_disposal?: string;
+  disposal_remark?: string;
+  sort_order?: number;
+  parent_part_id?: string;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -180,14 +225,18 @@ export interface WorkCardPart {
 /** 委外单 */
 export interface OutsourceOrder {
   id?: string;
-  order_no: string; // 委托单编码（唯一）
-  source_card_id?: string; // 来源工卡
-  outsource_party: string; // 委外方
-  part_codes?: string[]; // 零件编号数组
-  status?: string; // 状态
-  ship_date?: string; // 发货日期
-  return_date?: string; // 返回日期
-  operator?: string;
+  order_no: string;
+  workCardId?: string;
+  operator_id?: string;
+  operator_name?: string;
+  outsource_company?: string;
+  outsource_cost?: number;
+  outsource_status: OutsourceStatus | string;
+  part_code: string;
+  part_name?: string;
+  quantity: number;
+  send_date?: string;
+  receive_date?: string;
   remark?: string;
   created_at?: string;
   updated_at?: string;
@@ -196,58 +245,65 @@ export interface OutsourceOrder {
 /** 报废记录 */
 export interface ScrapRecord {
   id?: string;
-  card_id?: string;
+  scrap_no: string;
+  work_card_id?: string;
+  part_id?: string;
   part_code?: string;
   part_name?: string;
   quantity: number;
-  scrap_type?: string;
-  reason?: string;
-  operator?: string;
+  scrap_category?: string;
+  scrap_reason?: string;
+  scrap_time: string;
+  operator_id?: string;
+  operator_name?: string;
   remark?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 /** 出入库流水 */
 export interface InventoryTransaction {
   id?: string;
+  transaction_no: string;
   stock_id?: string;
-  transaction_type: 'inbound' | 'outbound';
-  stock_type?: StockType;
-  material_code: string;
-  material_name?: string;
+  part_code: string;
+  part_name?: string;
+  transaction_type: 'inbound' | 'outbound' | string;
   quantity: number;
-  unit: string;
-  related_barcode?: string;
-  card_id?: string;
-  operator?: string;
+  operator_id?: string;
+  operator_name?: string;
   transaction_time: string;
   remark?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
-/** 呼叫日志 */
+/** 异常呼叫日志 */
 export interface NotificationLog {
   id?: string;
-  station_code: string;
-  caller_id: string;
-  call_type: CallType;
-  callee_type?: CalleeType;
-  description?: string;
-  status?: string;
-  accepted_at?: string;
-  resolved_at?: string;
+  workstation_id?: string;
+  call_type: CallType | string;
+  call_content?: string;
+  call_time: string;
+  caller_id?: string;
+  caller_name?: string;
+  is_responded: boolean;
+  respond_time?: string;
+  responder_id?: string;
+  responder_name?: string;
+  remark?: string;
   created_at?: string;
+  updated_at?: string;
 }
 
 /** 形迹托盘模版 */
 export interface TrayTemplate {
   id?: string;
   template_code: string;
-  name: string;
-  tray_photo_object_id?: string;
-  version?: number;
-  status?: string;
-  remark?: string;
+  template_name: string;
+  workstation_type?: string;
+  description?: string;
+  trayPhotoObjectId?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -257,29 +313,78 @@ export interface TraySlot {
   id?: string;
   template_id: string;
   slot_code: string;
-  material_code: string;
-  material_name?: string;
-  shape_type?: 'circle' | 'square' | 'custom';
-  coordinates?: { x: number; y: number; r?: number; points?: Array<[number, number]> };
-  filled?: boolean;
-  sort_order?: number;
+  slot_name?: string;
+  slot_shape: string;
+  position_x?: number;
+  position_y?: number;
+  width?: number;
+  height?: number;
+  part_code?: string;
+  required: boolean;
+  slotStatus?: string;
+  sort_order: number;
   created_at?: string;
   updated_at?: string;
 }
 
-// ============ 检测结果（存 WorkCard.inspection_result JSON 字段）============
+/** 工步 */
+export interface WorkStep {
+  id?: string;
+  step_code?: string;
+  step_name?: string;
+  wbs_node_id?: string;
+  operation_content?: string;
+  quality_standard?: string;
+  tool_code?: string;
+  sort_order?: number;
+  remark?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+/** 修理记录（EADAF 实体名 Bop） */
+export interface Bop {
+  id?: string;
+  recordNo: string;
+  repairMethod: string;
+  repairDate?: string;
+  equipmentTooling?: string;
+  process?: string;
+  conclusion?: string;
+  defectDescription?: string;
+  responsiblePerson?: string;
+  status: string;
+  remark?: string;
+}
+
+/** AGV 转运任务 */
+export interface AgvTask {
+  id?: string;
+  taskNo: string;
+  fromStation: string;
+  toStation: string;
+  inboundRequestTime?: string;
+  outboundRequestTime?: string;
+  completedTime?: string;
+  carrierInfo?: string;
+  status: string;
+  remark?: string;
+}
+
+// ============ 检测结果聚合 DTO（BFF ↔ 前端，由 InspectionRecord 聚合）============
 
 /** 单条检测结果 */
 export interface InspectionResultItem {
   item_code: string;
+  inspection_item_id?: string;
   measured_value?: number;
-  result: InspectionResult; // qualified / unqualified / pending
+  result: InspectionResult;
   photo_object_ids?: string[];
-  collected_at?: string; // 采集时间
+  collected_at?: string;
   collected_by?: 'auto' | 'manual';
 }
 
-/** 工卡检测结果汇总（存 WorkCard.inspection_result） */
+/** 工卡检测结果汇总 */
 export interface InspectionResultData {
   items: InspectionResultItem[];
   summary: {
@@ -304,7 +409,7 @@ export interface CollectFrame {
   operator_id?: string;
   card_id?: string;
   item_code?: string;
-  raw: string; // base64
+  raw: string;
   ts: string;
 }
 
@@ -338,7 +443,6 @@ export interface LocalConfig {
   selected_station_name?: string;
   selected_station_type?: WorkstationType;
   dual_screen: boolean;
-  /** 启动时是否默认全屏（未单独设置主/副屏全屏习惯时生效） */
   default_fullscreen?: boolean;
 }
 
@@ -351,8 +455,6 @@ export interface UserHabits {
   sound_alarm: boolean;
   last_secondary_tab?: string;
   font_scale?: OpFontScale;
-  /** 主屏是否全屏（运行时偏好，可持久化） */
   main_fullscreen?: boolean;
-  /** 副屏是否全屏（运行时偏好，可持久化） */
   secondary_fullscreen?: boolean;
 }

@@ -68,17 +68,25 @@ opRouter.get('/workcards/:id', async (req, res) => {
     const id = req.params.id;
     const work_card = await repo.workCardRepo.get(id);
     if (!work_card) return res.status(404).json({ code: 404, message: '工卡不存在', data: null });
-    // 并行加载关联数据
-    const [parts, wbsNode] = await Promise.all([
+    const [parts, wbsNode, inspectionRecords, workSteps] = await Promise.all([
       repo.workCardPartRepo.listByCard(id).then((r) => r.items).catch(() => []),
       work_card.wbs_node_id
         ? repo.wbsNodeRepo.get(work_card.wbs_node_id).catch(() => null)
         : Promise.resolve(null),
+      repo.inspectionRecordRepo.listByWorkCard(id).then((r) => r.items).catch(() => []),
+      work_card.wbs_node_id
+        ? repo.workStepRepo.listByWbs(work_card.wbs_node_id).then((r) => r.items).catch(() => [])
+        : Promise.resolve([]),
     ]);
+    let inspection_result: InspectionResultData | undefined;
+    if (inspectionRecords.length > 0) {
+      const items = await repo.inspectionItemRepo.listByWorkCard(id).then((r) => r.items).catch(() => []);
+      inspection_result = await repo.recordsToInspectionResult(inspectionRecords, items);
+    }
     res.json({
       code: 200,
       message: 'success',
-      data: { work_card, parts, wbs_node: wbsNode },
+      data: { work_card: { ...work_card, inspection_result }, parts, wbs_node: wbsNode, work_steps: workSteps },
     });
   } catch (e) {
     handleError(res, e);
@@ -93,14 +101,14 @@ opRouter.post('/workcards/:id/accept', async (req, res) => {
     const operatorId = req.user?.user_id ?? req.user?.id ?? 'unknown';
     const operatorName = req.user?.name ?? req.user?.username ?? '';
     await repo.workCardRepo.update(id, {
-      status: 'processing',
+      status: 'in_progress',
       accept_time: now,
       start_time: now,
       accept_operator_id: operatorId,
       accept_operator_name: operatorName,
     });
     const updated = await repo.workCardRepo.get(id);
-    opHub.broadcast({ type: WS_EVENTS.WORKCARD_STATUS_CHANGED, payload: { id, status: 'processing', operator: operatorName } });
+    opHub.broadcast({ type: WS_EVENTS.WORKCARD_STATUS_CHANGED, payload: { id, status: 'in_progress', operator: operatorName } });
     res.json({ code: 200, message: 'success', data: updated });
   } catch (e) {
     handleError(res, e);
@@ -133,15 +141,29 @@ opRouter.post('/workcards/:id/submit', async (req, res) => {
       complete_time: now,
       progress: 100,
     };
-    // 如有检测结果摘要，更新合格/不合格计数
+
     if (req.body?.inspection_result) {
+      const operatorId = req.user?.user_id ?? req.user?.id;
+      const operatorName = req.user?.name ?? req.user?.username;
+      await repo.saveInspectionResultData(id, req.body.inspection_result as InspectionResultData, {
+        id: operatorId,
+        name: operatorName,
+      });
       const resultData = req.body.inspection_result as InspectionResultData;
-      updateBody.inspection_result = resultData;
       if (resultData.summary) {
         updateBody.qualified_parts = resultData.summary.qualified;
         updateBody.unqualified_parts = resultData.summary.unqualified;
       }
+    } else {
+      const records = await repo.inspectionRecordRepo.listByWorkCard(id);
+      const qualified = records.items.filter((r) => r.result === 'qualified').length;
+      const unqualified = records.items.filter((r) => r.result === 'unqualified').length;
+      if (records.items.length > 0) {
+        updateBody.qualified_parts = qualified;
+        updateBody.unqualified_parts = unqualified;
+      }
     }
+
     await repo.workCardRepo.update(id, updateBody);
     const updated = await repo.workCardRepo.get(id);
     opHub.broadcast({ type: WS_EVENTS.WORKCARD_STATUS_CHANGED, payload: { id, status: 'completed' } });
@@ -151,12 +173,14 @@ opRouter.post('/workcards/:id/submit', async (req, res) => {
   }
 });
 
-/** 保存检测结果（不提交，仅存 WorkCard.inspection_result） */
+/** 保存检测结果（写入 InspectionRecord，并更新工卡合格/不合格计数） */
 opRouter.post('/workcards/:id/inspection-result', async (req, res) => {
   try {
     const resultData = req.body as InspectionResultData;
+    const operatorId = req.user?.user_id ?? req.user?.id;
+    const operatorName = req.user?.name ?? req.user?.username;
+    await repo.saveInspectionResultData(req.params.id, resultData, { id: operatorId, name: operatorName });
     await repo.workCardRepo.update(req.params.id, {
-      inspection_result: resultData,
       qualified_parts: resultData.summary?.qualified,
       unqualified_parts: resultData.summary?.unqualified,
     });
@@ -190,15 +214,34 @@ opRouter.patch('/parts/:partId', async (req, res) => {
   }
 });
 
-// ============ 检测项 ============
-opRouter.get('/inspection-items', async (req, res) => {
+// ============ 工步 ============
+opRouter.get('/work-steps', async (req, res) => {
   try {
     const wbsNodeId = req.query.wbs_node_id as string | undefined;
+    const result = wbsNodeId
+      ? await repo.workStepRepo.listByWbs(wbsNodeId)
+      : await repo.workStepRepo.list({ limit: 200 });
+    res.json({ code: 200, message: 'success', data: result });
+  } catch (e) {
+    handleError(res, e);
+  }
+});
+
+/**
+ * 检测项列表（EADAF fmms/quality/InspectionItem）
+ * Query: work_card_id | work_step_id | part_code
+ * 优先按工卡汇总（工步 work_step_id + 零件 part_code），与 WBS 无直接关联。
+ */
+opRouter.get('/inspection-items', async (req, res) => {
+  try {
+    const workCardId = req.query.work_card_id as string | undefined;
+    const workStepId = req.query.work_step_id as string | undefined;
     const partCode = req.query.part_code as string | undefined;
     let result;
-    if (wbsNodeId) result = await repo.inspectionItemRepo.listByWbs(wbsNodeId);
+    if (workCardId) result = await repo.inspectionItemRepo.listByWorkCard(workCardId);
+    else if (workStepId) result = await repo.inspectionItemRepo.listByWorkStep(workStepId);
     else if (partCode) result = await repo.inspectionItemRepo.listByPartCode(partCode);
-    else result = await repo.inspectionItemRepo.listAll({ limit: 200 });
+    else result = await repo.inspectionItemRepo.listAll({ limit: 100 });
     res.json({ code: 200, message: 'success', data: result });
   } catch (e) {
     handleError(res, e);
@@ -229,20 +272,27 @@ opRouter.post('/tools', async (req, res) => {
 // ============ 异常呼叫 ============
 opRouter.post('/call', async (req, res) => {
   try {
-    const { call_type, callee_type, description, station_code } = req.body as {
+    const { call_type, description, station_code } = req.body as {
       call_type: CallType;
-      callee_type?: string;
       description?: string;
       station_code?: string;
     };
     const callerId = req.user?.user_id ?? req.user?.id ?? 'unknown';
+    const callerName = req.user?.name ?? req.user?.username ?? '';
+    let workstationId: string | undefined;
+    if (station_code) {
+      const ws = await repo.workstationRepo.getByCode(station_code);
+      workstationId = ws?.id;
+    }
+    const now = new Date().toISOString();
     const log = await repo.notificationRepo.create({
-      station_code: station_code ?? '',
+      workstation_id: workstationId,
       caller_id: callerId,
+      caller_name: callerName,
       call_type,
-      callee_type: callee_type as 'engineer' | 'manager' | undefined,
-      description,
-      status: 'pending',
+      call_content: description,
+      call_time: now,
+      is_responded: false,
     });
     opHub.broadcast({ type: WS_EVENTS.CALL_RECEIVED, payload: log }, station_code);
     res.json({ code: 200, message: 'success', data: log });
@@ -253,10 +303,14 @@ opRouter.post('/call', async (req, res) => {
 
 opRouter.get('/calls', async (req, res) => {
   try {
-    const result = await repo.notificationRepo.list({
-      stationCode: req.query.station_code as string | undefined,
-      status: req.query.status as string | undefined,
-    });
+    const stationCode = req.query.station_code as string | undefined;
+    let workstationId: string | undefined;
+    if (stationCode) {
+      const ws = await repo.workstationRepo.getByCode(stationCode);
+      workstationId = ws?.id;
+    }
+    const isResponded = req.query.status === 'resolved' ? true : req.query.status === 'pending' ? false : undefined;
+    const result = await repo.notificationRepo.list({ workstationId, isResponded });
     res.json({ code: 200, message: 'success', data: result });
   } catch (e) {
     handleError(res, e);
@@ -266,17 +320,37 @@ opRouter.get('/calls', async (req, res) => {
 // ============ 修理（委外/报废）============
 opRouter.post('/outsource', async (req, res) => {
   try {
-    const { source_card_id, outsource_party, part_codes } = req.body;
-    const order_no = `WW-${Date.now()}`;
-    const order = await repo.outsourceRepo.create({
-      order_no,
-      source_card_id,
-      outsource_party,
-      part_codes,
-      status: 'pending',
-      operator: req.user?.name ?? req.user?.username,
-    });
-    res.json({ code: 200, message: 'success', data: order });
+    const { source_card_id, outsource_party, outsource_company, part_codes, part_code, part_name, quantity } = req.body as {
+      source_card_id?: string;
+      outsource_party?: string;
+      outsource_company?: string;
+      part_codes?: string[];
+      part_code?: string;
+      part_name?: string;
+      quantity?: number;
+    };
+    const company = outsource_company ?? outsource_party ?? '';
+    const operatorId = req.user?.user_id ?? req.user?.id;
+    const operatorName = req.user?.name ?? req.user?.username;
+    const codes = part_codes?.length ? part_codes : part_code ? [part_code] : ['UNKNOWN'];
+    const orders = await Promise.all(
+      codes.map((code, idx) => {
+        const order_no = `WW-${Date.now()}-${idx}`;
+        return repo.outsourceRepo.create({
+          order_no,
+          workCardId: source_card_id,
+          outsource_company: company,
+          part_code: code,
+          part_name: part_name ?? code,
+          quantity: quantity ?? 1,
+          outsource_status: 'pending',
+          operator_id: operatorId,
+          operator_name: operatorName,
+          send_date: source_card_id ? new Date().toISOString() : undefined,
+        });
+      }),
+    );
+    res.json({ code: 200, message: 'success', data: orders.length === 1 ? orders[0] : orders });
   } catch (e) {
     handleError(res, e);
   }
@@ -284,8 +358,43 @@ opRouter.post('/outsource', async (req, res) => {
 
 opRouter.get('/outsource', async (req, res) => {
   try {
-    const result = await repo.outsourceRepo.list({ cardId: req.query.card_id as string | undefined });
+    const result = await repo.outsourceRepo.list({
+      workCardId: req.query.card_id as string | undefined,
+      limit: 100,
+    });
     res.json({ code: 200, message: 'success', data: result });
+  } catch (e) {
+    handleError(res, e);
+  }
+});
+
+/** 修理记录（写入 EADAF Bop 实体） */
+opRouter.post('/disposal/repair', async (req, res) => {
+  try {
+    const { method, equipment, process, conclusion, defect_description, work_card_id, part_id } = req.body as {
+      method?: string;
+      equipment?: string;
+      process?: string;
+      conclusion?: string;
+      defect_description?: string;
+      work_card_id?: string;
+      part_id?: string;
+    };
+    if (!method) return res.status(400).json({ code: 400, message: '缺少修理方法', data: null });
+    const operatorName = req.user?.name ?? req.user?.username ?? '';
+    const record = await repo.bopRepo.create({
+      recordNo: `BOP-${Date.now()}`,
+      repairMethod: method,
+      equipmentTooling: equipment,
+      process,
+      conclusion,
+      defectDescription: defect_description,
+      repairDate: new Date().toISOString(),
+      responsiblePerson: operatorName,
+      status: 'completed',
+      remark: [work_card_id && `work_card_id=${work_card_id}`, part_id && `part_id=${part_id}`].filter(Boolean).join('; ') || undefined,
+    });
+    res.json({ code: 200, message: 'success', data: record });
   } catch (e) {
     handleError(res, e);
   }
@@ -293,13 +402,31 @@ opRouter.get('/outsource', async (req, res) => {
 
 opRouter.post('/scrap', async (req, res) => {
   try {
-    const { card_id, items } = req.body as {
+    const { card_id, work_card_id, items } = req.body as {
       card_id?: string;
-      items: Array<{ part_code?: string; part_name?: string; quantity: number; scrap_type?: string; reason?: string }>;
+      work_card_id?: string;
+      items: Array<{ part_code?: string; part_name?: string; part_id?: string; quantity: number; scrap_type?: string; scrap_category?: string; reason?: string; scrap_reason?: string }>;
     };
-    const operator = req.user?.name ?? req.user?.username;
+    const wcId = work_card_id ?? card_id;
+    const operatorId = req.user?.user_id ?? req.user?.id;
+    const operatorName = req.user?.name ?? req.user?.username;
+    const now = new Date().toISOString();
     const records = await Promise.all(
-      items.map((it) => repo.scrapRepo.create({ card_id, ...it, operator })),
+      items.map((it, idx) =>
+        repo.scrapRepo.create({
+          scrap_no: `BF-${Date.now()}-${idx}`,
+          work_card_id: wcId,
+          part_id: it.part_id,
+          part_code: it.part_code,
+          part_name: it.part_name,
+          quantity: it.quantity,
+          scrap_category: it.scrap_category ?? it.scrap_type,
+          scrap_reason: it.scrap_reason ?? it.reason,
+          scrap_time: now,
+          operator_id: operatorId,
+          operator_name: operatorName,
+        }),
+      ),
     );
     res.json({ code: 200, message: 'success', data: records });
   } catch (e) {
@@ -319,11 +446,19 @@ opRouter.get('/inventory', async (_req, res) => {
 
 opRouter.post('/inventory/transaction', async (req, res) => {
   try {
+    const { material_code, part_code, part_name, unit, stock_type, card_id, related_barcode, ...rest } = req.body as Record<string, unknown>;
+    const operatorId = req.user?.user_id ?? req.user?.id;
+    const operatorName = req.user?.name ?? req.user?.username;
     const tx = await repo.inventoryTxRepo.create({
-      ...req.body,
-      operator: req.user?.name ?? req.user?.username,
-      transaction_time: req.body.transaction_time ?? new Date().toISOString(),
-    });
+      ...rest,
+      transaction_no: `TX-${Date.now()}`,
+      part_code: (part_code ?? material_code) as string,
+      part_name: part_name as string | undefined,
+      operator_id: operatorId,
+      operator_name: operatorName,
+      transaction_time: (rest.transaction_time as string) ?? new Date().toISOString(),
+      remark: [related_barcode, card_id, stock_type, unit].filter(Boolean).join(' | ') || undefined,
+    } as Parameters<typeof repo.inventoryTxRepo.create>[0]);
     res.json({ code: 200, message: 'success', data: tx });
   } catch (e) {
     handleError(res, e);
@@ -342,8 +477,7 @@ opRouter.get('/tray-templates', async (_req, res) => {
 
 opRouter.get('/tray-templates/:id', async (req, res) => {
   try {
-    const result = await repo.trayTemplateRepo.list({ filter: { id: req.params.id } });
-    const template = result.items[0];
+    const template = await repo.trayTemplateRepo.get(req.params.id);
     if (!template) return res.status(404).json({ code: 404, message: '模版不存在', data: null });
     const slots = await repo.traySlotRepo.listByTemplate(req.params.id);
     res.json({ code: 200, message: 'success', data: { template, slots: slots.items } });
@@ -354,9 +488,18 @@ opRouter.get('/tray-templates/:id', async (req, res) => {
 
 opRouter.patch('/tray-slots/:slotId', async (req, res) => {
   try {
-    const { filled } = req.body;
-    await repo.traySlotRepo.update(req.params.slotId, { filled });
-    res.json({ code: 200, message: 'success', data: { id: req.params.slotId, filled } });
+    const { required, slot_status, slotStatus, filled } = req.body as {
+      required?: boolean;
+      slot_status?: string;
+      slotStatus?: string;
+      filled?: boolean;
+    };
+    const body: Record<string, unknown> = {};
+    if (required != null) body.required = required;
+    const status = slotStatus ?? slot_status ?? (filled != null ? (filled ? 'filled' : 'empty') : undefined);
+    if (status != null) body.slotStatus = status;
+    await repo.traySlotRepo.update(req.params.slotId, body);
+    res.json({ code: 200, message: 'success', data: { id: req.params.slotId, ...body } });
   } catch (e) {
     handleError(res, e);
   }
@@ -419,7 +562,43 @@ opRouter.get('/storage/:objectId/preview', async (req, res) => {
   }
 });
 
-// AGV（Mock 占位，不上报 PCS）
+// AGV 转运（写入 EADAF AgvTask）
 opRouter.post('/agv', async (req, res) => {
-  res.json({ code: 200, message: 'success', data: { task_id: `AGV-${Date.now()}`, status: 'pending', mock: true, ...req.body } });
+  try {
+    const { action, from_station, to_station, card_id, carrier_info } = req.body as {
+      action: 'in' | 'out';
+      from_station?: string;
+      to_station?: string;
+      card_id?: string;
+      carrier_info?: string;
+    };
+    if (!from_station) return res.status(400).json({ code: 400, message: '缺少起始工位 from_station', data: null });
+    const now = new Date().toISOString();
+    const task = await repo.agvTaskRepo.create({
+      taskNo: `AGV-${Date.now()}`,
+      fromStation: from_station,
+      toStation: to_station ?? from_station,
+      inboundRequestTime: now,
+      outboundRequestTime: action === 'out' ? now : undefined,
+      carrierInfo: carrier_info ?? (card_id ? `work_card:${card_id}` : undefined),
+      status: 'pending',
+    });
+    opHub.broadcast({ type: WS_EVENTS.AGV_STATUS, payload: task });
+    res.json({ code: 200, message: 'success', data: task });
+  } catch (e) {
+    handleError(res, e);
+  }
+});
+
+opRouter.get('/agv', async (req, res) => {
+  try {
+    const result = await repo.agvTaskRepo.list({
+      fromStation: req.query.from_station as string | undefined,
+      status: req.query.status as string | undefined,
+      limit: 50,
+    });
+    res.json({ code: 200, message: 'success', data: result });
+  } catch (e) {
+    handleError(res, e);
+  }
 });

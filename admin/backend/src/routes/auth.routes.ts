@@ -67,9 +67,11 @@ authRouter.get('/check', async (req, res) => {
   const token = extractToken(req);
   if (!token) return res.status(401).json({ code: 401, message: '未认证', data: null });
   try {
-    const resp = await fetch(`${config.eadaf.apiBaseUrl}/api/v1/auth/check`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    // 应用 JWT 由 EADAF 用【应用密钥】签发，check 必须带 app，否则会按平台密钥验签 401
+    const resp = await fetch(
+      `${config.eadaf.apiBaseUrl}/api/v1/auth/check?app=${config.eadaf.applicationId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
     if (resp.ok) return res.json({ code: 200, message: 'success', data: { valid: true } });
     return res.status(401).json({ code: 401, message: 'token 无效', data: null });
   } catch (e) {

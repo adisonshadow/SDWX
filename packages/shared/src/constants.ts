@@ -21,15 +21,26 @@ export const WORKSTATION_TYPE_LABELS: Record<WorkstationType, string> = {
   receive_send: '收发',
 };
 
-// ---- 工卡状态（对齐 demo: unaccepted/pending/processing/completed）----
-export const WORK_CARD_STATUSES = ['unaccepted', 'pending', 'processing', 'completed'] as const;
+// ---- 工卡状态（对齐 EADAF: pending/in_progress/completed/cancelled）----
+export const WORK_CARD_STATUSES = ['pending', 'in_progress', 'completed', 'cancelled'] as const;
 export type WorkCardStatus = (typeof WORK_CARD_STATUSES)[number];
 
 export const WORK_CARD_STATUS_LABELS: Record<WorkCardStatus, string> = {
-  unaccepted: '未接受',
-  pending: '待处理',
-  processing: '处理中',
+  pending: '待执行',
+  in_progress: '执行中',
   completed: '已完成',
+  cancelled: '已取消',
+};
+
+/**
+ * 工卡状态排序优先级（数字小者在前）。
+ * 顺序：待执行 pending → 执行中 in_progress → 已完成 completed → 已取消 cancelled
+ */
+export const WORK_CARD_STATUS_PRIORITY: Record<WorkCardStatus, number> = {
+  pending: 1,
+  in_progress: 2,
+  completed: 3,
+  cancelled: 4,
 };
 
 // ---- 零部件状态 ----
@@ -73,14 +84,9 @@ export const CALL_TYPE_LABELS: Record<CallType, string> = {
   material: '物料异常',
 };
 
-// ---- 呼叫被叫对象 ----
-export const CALLEE_TYPES = ['engineer', 'manager'] as const;
-export type CalleeType = (typeof CALLEE_TYPES)[number];
-
-export const CALLEE_TYPE_LABELS: Record<CalleeType, string> = {
-  engineer: '工程师',
-  manager: '管理人员',
-};
+// ---- 委外状态 ----
+export const OUTSOURCE_STATUSES = ['pending', 'sent', 'received', 'cancelled'] as const;
+export type OutsourceStatus = (typeof OUTSOURCE_STATUSES)[number];
 
 // ---- 线边库类型 ----
 export const STOCK_TYPES = ['outsource_cache', 'staging', 'scrap'] as const;
@@ -99,6 +105,7 @@ export const EADAF_SCOPES = {
   logistics: 'fmms/logistics',
   production: 'fmms/production',
   quality: 'fmms/quality',
+  service: 'fmms/service',
   tooling: 'fmms/tooling',
 } as const;
 
@@ -107,21 +114,25 @@ export const EADAF_SCOPES = {
  * 集中管理，routePath 变化时只改这里
  */
 export const EADAF_ROUTES = {
-  // 已有 6 实体（已发布，见 applications-public/FMMS/apis.json）
+  // 对齐 applications-public/FMMS/apis.json
   workCard: `${EADAF_SCOPES.production}/WorkCard`,
   workstation: `${EADAF_SCOPES.tooling}/Workstation`,
   wbsNode: `${EADAF_SCOPES.production}/WbsNode`,
   inspectionItem: `${EADAF_SCOPES.quality}/InspectionItem`,
+  inspectionRecord: `${EADAF_SCOPES.quality}/InspectionRecord`,
   measuringTool: `${EADAF_SCOPES.tooling}/MeasuringTool`,
   lineStock: `${EADAF_SCOPES.logistics}/LineStock`,
-  // 补充实体（待 EADAF 创建，scope 按业务域预分配）
+  lineStockItem: `${EADAF_SCOPES.logistics}/LineStockItem`,
   workCardPart: `${EADAF_SCOPES.production}/WorkCardPart`,
-  outsourceOrder: `${EADAF_SCOPES.production}/OutsourceOrder`,
-  scrapRecord: `${EADAF_SCOPES.production}/ScrapRecord`,
+  outsourceOrder: `${EADAF_SCOPES.service}/OutsourceOrder`,
+  scrapRecord: `${EADAF_SCOPES.service}/ScrapRecord`,
   inventoryTransaction: `${EADAF_SCOPES.logistics}/InventoryTransaction`,
-  notificationLog: `${EADAF_SCOPES.production}/NotificationLog`,
-  trayTemplate: `${EADAF_SCOPES.tooling}/TrayTemplate`,
-  traySlot: `${EADAF_SCOPES.tooling}/TraySlot`,
+  notificationLog: `${EADAF_SCOPES.service}/NotificationLog`,
+  trayTemplate: `${EADAF_SCOPES.logistics}/TrayTemplate`,
+  traySlot: `${EADAF_SCOPES.logistics}/TraySlot`,
+  bop: `${EADAF_SCOPES.production}/Bop`,
+  workStep: `${EADAF_SCOPES.production}/WorkStep`,
+  agvTask: `${EADAF_SCOPES.service}/AgvTask`,
 } as const;
 
 /**

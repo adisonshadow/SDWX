@@ -6,12 +6,12 @@
  */
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { Spin, Empty } from 'antd';
-import { SettingOutlined } from '@ant-design/icons';
 import { useOPHeader } from '../../layout/OPHeaderContext';
 import { useLocalConfig } from '../../hooks/useLocalConfig';
 import { fetchWorkCards, fetchWorkstation } from '../../api/opApi';
 import {
   WORK_CARD_STATUS_LABELS,
+  WORK_CARD_STATUS_PRIORITY,
   WORKSTATION_TYPE_LABELS,
   type WorkCard,
   type WorkCardStatus,
@@ -21,11 +21,9 @@ import {
 export default function WorkCardList({
   stationType,
   onSelectCard,
-  onRegister,
 }: {
   stationType: WorkstationType;
   onSelectCard: (id: string) => void;
-  onRegister?: () => void;
 }) {
   const { config } = useLocalConfig();
   const [cards, setCards] = useState<WorkCard[]>([]);
@@ -64,14 +62,16 @@ export default function WorkCardList({
     load();
   }, [load]);
 
-  const rightButtons = useMemo(
-    () => [
-      { key: 'register', label: '设备注册', icon: <SettingOutlined />, onClick: () => onRegister?.() },
-    ],
-    [onRegister],
-  );
+  useOPHeader({ title: headerTitle, onRefresh: load });
 
-  useOPHeader({ title: headerTitle, rightButtons, onRefresh: load });
+  // 按状态优先级排序：待执行 pending → 执行中 in_progress → 已完成 completed → 已取消 cancelled
+  const sortedCards = useMemo(() => {
+    return [...cards].sort((a, b) => {
+      const pa = WORK_CARD_STATUS_PRIORITY[a.status as WorkCardStatus] ?? 99;
+      const pb = WORK_CARD_STATUS_PRIORITY[b.status as WorkCardStatus] ?? 99;
+      return pa - pb;
+    });
+  }, [cards]);
 
   return (
     <div className="op-body">
@@ -79,11 +79,11 @@ export default function WorkCardList({
           <div style={{ textAlign: 'center', padding: 48 }}>
             <Spin size="large" />
           </div>
-        ) : cards.length === 0 ? (
+        ) : sortedCards.length === 0 ? (
           <Empty description="暂无工卡" />
         ) : (
           <div className="op-card-grid-3">
-            {cards.map((card) => (
+            {sortedCards.map((card) => (
               <WorkCardCard key={card.id ?? card.card_code} card={card} onClick={() => onSelectCard(card.id ?? card.card_code)} />
             ))}
           </div>
@@ -97,13 +97,13 @@ function WorkCardCard({ card, onClick }: { card: WorkCard; onClick: () => void }
   return (
     <div className={`op-workcard ${status}`} onClick={onClick}>
       <span className="op-status-tag">{WORK_CARD_STATUS_LABELS[status] ?? status}</span>
-      <div className="op-task-id">任务号：{card.card_code}</div>
+      <div className="op-task-id">{card.card_code}</div>
       {card.product_name && <div className="op-meta-row">产品：{card.product_name}</div>}
-      {card.batch_no && <div className="op-meta-row">批次：{card.batch_no}</div>}
+      {card.batch_no && <div className="op-meta-row">令号：{card.batch_no}</div>}
       {card.accept_time && <div className="op-meta-row">接受时间：{card.accept_time}</div>}
       {card.complete_time && <div className="op-meta-row">完成时间：{card.complete_time}</div>}
       {card.accept_operator_name && <div className="op-meta-row">操作人：{card.accept_operator_name}</div>}
-      {card.progress != null && card.progress > 0 && card.status === 'processing' && (
+      {card.progress != null && card.progress > 0 && card.status === 'in_progress' && (
         <div className="op-meta-row">
           进度：{card.progress}%
           <div className="op-progress-bar">

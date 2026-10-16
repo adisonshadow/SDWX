@@ -22,6 +22,7 @@ export default function OPHeader({
   rightSlot,
   trailingSlot,
   onMore,
+  isPutTitleLeft = false,
 }: {
   title: string;
   onBack?: () => void;
@@ -30,9 +31,11 @@ export default function OPHeader({
   /** 页面按钮之后、「更多」之前的全局操作区 */
   trailingSlot?: ReactNode;
   onMore?: () => void;
+  /** 为 true 时标题靠左对齐，默认 false（居中） */
+  isPutTitleLeft?: boolean;
 }) {
   return (
-    <div className="op-header">
+    <div className={`op-header${isPutTitleLeft ? ' is-title-left' : ''}`}>
       <div className="op-header-left">
         {onBack ? (
           <button type="button" className="op-header-btn op-back-btn" onClick={onBack}>
@@ -40,7 +43,7 @@ export default function OPHeader({
           </button>
         ) : null}
       </div>
-      <div className="op-header-center">{title}</div>
+      <div className={`op-header-center${isPutTitleLeft ? ' is-left' : ''}`}>{title}</div>
       <div className="op-header-right">
         {rightSlot}
         {rightButtons?.map((btn) => (

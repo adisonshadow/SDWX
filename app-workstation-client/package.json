@@ -5,8 +5,8 @@
   "description": "FMMS 工位客户端 (Electron) — 双屏 webview + 本地配置页 + 采集转发",
   "main": "dist-electron/app-workstation-client/electron/main.js",
   "scripts": {
-    "dev": "vite",
-    "dev:electron": "concurrently -k -n VITE,TSC,ELECTRON -c blue,cyan,magenta \"vite build --watch\" \"tsc -p electron/tsconfig.json --watch --preserveWatchOutput\" \"wait-on ./dist/index.html ./dist-electron/app-workstation-client/electron/main.js && electron .\"",
+    "dev:web": "vite",
+    "dev": "concurrently -k -n VITE,TSC,ELECTRON -c blue,cyan,magenta \"vite build --watch\" \"tsc -p electron/tsconfig.json --watch --preserveWatchOutput\" \"wait-on ./dist/index.html ./dist-electron/app-workstation-client/electron/main.js && electron .\"",
     "build": "vite build && tsc -p electron/tsconfig.json",
     "typecheck": "tsc -p electron/tsconfig.json --noEmit && tsc --noEmit",
     "lint": "eslint src electron --ext .ts,.tsx",

@@ -1,0 +1,14 @@
+---
+description: 发现 EADAF / 平台 API 问题时立即告知用户优先修 EADAF
+alwaysApply: true
+---
+
+# EADAF / 平台 API 问题优先上报
+
+如果排查中发现根因在 **EADAF** 或 **EADAF 提供的 API**（含 OpenAPI/`apis.json` 与实际行为不一致、HTTP 方法/路径错误、分页/删除/更新契约不符、返回非 JSON 等），必须：
+
+1. **立即明确告知用户**：这是 EADAF 侧问题（不要先埋在 BFF 里长期兜底）。
+2. 说明：证据（请求 URL/方法/状态码/响应摘要）、期望契约（文档或 Skill 条款）、实际行为。
+3. 告知用户可优先修改 EADAF；IPS BFF/前端仅在用户确认后再做临时兼容。
+
+不要把平台契约错误默默绕过而不上报。

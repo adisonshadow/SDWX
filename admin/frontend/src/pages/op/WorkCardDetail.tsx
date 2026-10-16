@@ -1,11 +1,12 @@
 /**
- * WorkCardDetail — 工卡详情 + 零部件选择（卡片网格，参考 5702demo select 页）
+ * WorkCardDetail — 工卡详情 + 次屏区域
  *
- * 点击零件 → 副屏渲染对应检测表（BroadcastChannel 同步）
+ * 工卡信息（Descriptions / 工步 / 进度）在上方；下方「次屏区域」在副屏未开启时
+ * 内嵌对应工位类型的作业看板（分拣/故检/修理/收发）。副屏开启时该区域隐藏（由独立副屏承载）。
  */
 import { useEffect, useState, useMemo } from 'react';
-import { Spin, Empty, Button, Tag, App, Descriptions, Progress } from 'antd';
-import { CheckCircleOutlined, FileTextOutlined, CarOutlined, ScanOutlined } from '@ant-design/icons';
+import { Spin, Empty, Tag, App, Descriptions, Progress, Modal } from 'antd';
+import { CheckCircleOutlined, CarOutlined } from '@ant-design/icons';
 import { useOPHeader } from '../../layout/OPHeaderContext';
 import AgvModal from '../../components/AgvModal';
 import {
@@ -14,18 +15,41 @@ import {
   submitWorkCard,
 } from '../../api/opApi';
 import { useOpContext } from '../../layout/OPContext';
+import { useLocalConfig } from '../../hooks/useLocalConfig';
+import { renderOpBoard } from '../../layout/renderOpBoard';
 import {
-  PART_STATUS_LABELS,
   type WorkCard,
-  type WorkCardPart,
-  type PartStatus,
+  type WorkStep,
+  type WbsNode,
+  type ProcessResource,
 } from '@fmms/shared';
 
-const PART_BADGE_CLASS: Record<PartStatus, string> = {
-  pending: 'pending',
-  checking: 'checking',
-  done: 'done',
-};
+/** 兼容 EADAF 返回的 array / record，以及 camelCase / snake_case 字段 */
+function normalizeProcessResources(raw: unknown): ProcessResource[] {
+  if (!raw) return [];
+  const list = Array.isArray(raw)
+    ? raw
+    : typeof raw === 'object'
+      ? Object.values(raw as Record<string, unknown>)
+      : [];
+  return list
+    .filter((item): item is Record<string, unknown> => !!item && typeof item === 'object')
+    .map((item) => {
+      const resourceType = (item.resource_type ?? item.resourceType) as ProcessResource['resource_type'] | undefined;
+      return {
+        resource_type: resourceType ?? 'file',
+        title: String(item.title ?? ''),
+        url: String(item.url ?? ''),
+        mime_type: (item.mime_type ?? item.mimeType) as string | undefined,
+        playable_in_client: Boolean(item.playable_in_client ?? item.playableInClient),
+      } satisfies ProcessResource;
+    })
+    .filter((r) => r.title && r.url);
+}
+
+function isPlayableVideo(res: ProcessResource): boolean {
+  return res.resource_type === 'video' || !!res.playable_in_client;
+}
 
 export default function WorkCardDetail({
   cardId,
@@ -36,26 +60,41 @@ export default function WorkCardDetail({
 }) {
   const { message } = App.useApp();
   const ctx = useOpContext();
+  const { config } = useLocalConfig();
   const [card, setCard] = useState<WorkCard | null>(null);
-  const [parts, setParts] = useState<WorkCardPart[]>([]);
+  const [workSteps, setWorkSteps] = useState<WorkStep[]>([]);
+  const [wbsNode, setWbsNode] = useState<WbsNode | null>(null);
   const [loading, setLoading] = useState(false);
   const [agvOpen, setAgvOpen] = useState(false);
+  const [videoRes, setVideoRes] = useState<ProcessResource | null>(null);
+  /** 工步分页（超过 1 个时，一页只显示一个） */
+  const [stepPage, setStepPage] = useState(0);
 
   const load = () => {
     setLoading(true);
     fetchWorkCardDetail(cardId)
       .then((data) => {
         setCard(data.work_card);
-        setParts(data.parts);
+        setWorkSteps(data.work_steps ?? []);
+        setWbsNode(data.wbs_node ?? null);
       })
       .catch((e) => message.error(`加载失败: ${e.message}`))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => {
+    setStepPage(0);
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId]);
+
+  const sortedSteps = useMemo(
+    () =>
+      [...workSteps].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0)),
+    [workSteps],
+  );
+
+  const currentStep = sortedSteps[Math.min(stepPage, Math.max(sortedSteps.length - 1, 0))];
 
   const handleAccept = async () => {
     try {
@@ -77,23 +116,31 @@ export default function WorkCardDetail({
     }
   };
 
-  const selectPart = (part: WorkCardPart) => {
-    ctx.setSelectedPartId(part.id ?? part.part_code);
-    ctx.broadcastSelectPart(part.id ?? part.part_code);
-  };
+  const workstationType = ctx.workstationType ?? config?.selected_station_type;
+
+  const processResources = useMemo(
+    () => normalizeProcessResources(wbsNode?.process_resources),
+    [wbsNode?.process_resources],
+  );
 
   const rightButtons = useMemo(() => {
+    // 副屏在线时，AGV / 提交结果改由副屏 header 承载
+    if (ctx.secondaryOnline) {
+      if (card?.status === 'pending') {
+        return [{ key: 'accept', label: '接受任务', icon: <CheckCircleOutlined />, onClick: () => void handleAccept() }];
+      }
+      return [];
+    }
     const buttons = [
-      { key: 'craft', label: '工艺', icon: <FileTextOutlined />, onClick: () => message.info('工艺资料（待接 WBS process_resources）') },
       { key: 'agv', label: 'AGV', icon: <CarOutlined />, onClick: () => setAgvOpen(true) },
     ];
-    if (card?.status === 'unaccepted') {
-      buttons.push({ key: 'accept', label: '接受任务', icon: <CheckCircleOutlined />, onClick: handleAccept });
+    if (card?.status === 'pending') {
+      buttons.push({ key: 'accept', label: '接受任务', icon: <CheckCircleOutlined />, onClick: () => void handleAccept() });
     } else if (card && card.status !== 'completed') {
-      buttons.push({ key: 'submit', label: '提交结果', icon: <CheckCircleOutlined />, onClick: handleSubmit });
+      buttons.push({ key: 'submit', label: '提交结果', icon: <CheckCircleOutlined />, onClick: () => void handleSubmit() });
     }
     return buttons;
-  }, [card, message]);
+  }, [card, ctx.secondaryOnline]);
 
   useOPHeader({
     title: card?.card_name ?? card?.card_code ?? '工卡详情',
@@ -118,7 +165,7 @@ export default function WorkCardDetail({
                 <Tag>{card.status}</Tag>
               </Descriptions.Item>
               <Descriptions.Item label="产品">{card.product_name ?? '-'}</Descriptions.Item>
-              <Descriptions.Item label="批次">{card.batch_no ?? '-'}</Descriptions.Item>
+              <Descriptions.Item label="令号">{card.batch_no ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="序列号">{card.serial_no ?? '-'}</Descriptions.Item>
               <Descriptions.Item label="操作员">{card.accept_operator_name ?? '-'}</Descriptions.Item>
             </Descriptions>
@@ -129,56 +176,141 @@ export default function WorkCardDetail({
               </div>
             )}
 
-            <div style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0, color: 'var(--op-text-primary)' }}>零部件任务看板</h3>
-              <Button icon={<ScanOutlined />} onClick={() => message.info('扫码识别（待接扫码枪）')}>
-                扫码定位
-              </Button>
+            <div style={{ marginBottom: 20 }}>
+              <h3 style={{ marginBottom: 12, color: 'var(--op-text-primary)' }}>工艺信息</h3>
+              <Descriptions bordered column={3} size="small">
+                <Descriptions.Item label="工序">{wbsNode?.process_name ?? wbsNode?.wbs_name ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="工序编码">{wbsNode?.process_code ?? '-'}</Descriptions.Item>
+                <Descriptions.Item label="预计工时">
+                  {wbsNode?.estimated_minutes != null ? `${wbsNode.estimated_minutes} 分钟` : '-'}
+                </Descriptions.Item>
+                {wbsNode?.process_description && (
+                  <Descriptions.Item label="工序说明" span={3}>{wbsNode.process_description}</Descriptions.Item>
+                )}
+                {processResources.length > 0 && (
+                  <Descriptions.Item label="工艺资源" span={3}>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+                      {processResources.map((res, idx) => {
+                        const playable = isPlayableVideo(res);
+                        if (playable) {
+                          return (
+                            <a
+                              key={idx}
+                              href={res.url}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                setVideoRes(res);
+                              }}
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: 4, cursor: 'pointer' }}
+                            >
+                              {res.title}
+                              <Tag style={{ marginLeft: 4 }}>视频</Tag>
+                            </a>
+                          );
+                        }
+                        return (
+                          <a
+                            key={idx}
+                            href={res.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                          >
+                            {res.title}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </Descriptions.Item>
+                )}
+              </Descriptions>
             </div>
 
-            {parts.length === 0 ? (
-              <Empty description="暂无零部件数据（需在 EADAF 创建 WorkCardPart 实体）" />
-            ) : (
-              <div className="op-card-grid-2">
-                {parts.map((part) => (
-                  <PartCard
-                    key={part.id ?? part.part_code}
-                    part={part}
-                    selected={ctx.selectedPartId === (part.id ?? part.part_code)}
-                    onClick={() => selectPart(part)}
-                  />
-                ))}
+            <div style={{ marginBottom: 20 }}>
+              <div className="op-step-header">
+                <h3 className="op-step-title">工步</h3>
+                {sortedSteps.length > 1 && (
+                  <div className="op-step-pager" role="tablist" aria-label="工步分页">
+                    {sortedSteps.map((step, idx) => (
+                      <button
+                        key={step.id ?? step.step_code ?? idx}
+                        type="button"
+                        role="tab"
+                        aria-selected={idx === stepPage}
+                        className={`op-step-page-dot${idx === stepPage ? ' is-active' : ''}`}
+                        onClick={() => setStepPage(idx)}
+                      >
+                        {idx + 1}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {sortedSteps.length === 0 ? (
+                <Empty description="暂无工步" />
+              ) : currentStep ? (
+                <Descriptions
+                  key={currentStep.id ?? currentStep.step_code ?? stepPage}
+                  bordered
+                  column={3}
+                  size="small"
+                  title={
+                    <span style={{ fontSize: 14 }}>
+                      {stepPage + 1}. {currentStep.step_name ?? currentStep.step_code ?? '-'}
+                    </span>
+                  }
+                >
+                  <Descriptions.Item label="工步编码">{currentStep.step_code ?? '-'}</Descriptions.Item>
+                  <Descriptions.Item label="使用工具">{currentStep.tool_code ?? '-'}</Descriptions.Item>
+                  <Descriptions.Item label="质量标准">{currentStep.quality_standard ?? '-'}</Descriptions.Item>
+                  {currentStep.operation_content && (
+                    <Descriptions.Item label="操作内容" span={3}>
+                      {currentStep.operation_content}
+                    </Descriptions.Item>
+                  )}
+                  {currentStep.remark && (
+                    <Descriptions.Item label="备注" span={3}>{currentStep.remark}</Descriptions.Item>
+                  )}
+                </Descriptions>
+              ) : null}
+            </div>
+
+            {!ctx.secondaryOnline && (
+              <div className="op-secondary-area">
+                <h3 style={{ marginBottom: 12, color: 'var(--op-text-primary)' }}>次屏区域</h3>
+                {renderOpBoard(workstationType, cardId, true)}
               </div>
             )}
           </>
         )}
       </div>
 
-      <AgvModal open={agvOpen} onClose={() => setAgvOpen(false)} cardId={cardId} />
+      <AgvModal
+        open={agvOpen}
+        onClose={() => setAgvOpen(false)}
+        cardId={cardId}
+        fromStation={config?.selected_station_code}
+      />
+
+      <Modal
+        title={videoRes?.title ?? '工艺视频'}
+        open={!!videoRes}
+        onCancel={() => setVideoRes(null)}
+        footer={null}
+        width={880}
+        destroyOnHidden
+        styles={{ body: { padding: 0, background: '#000' } }}
+      >
+        {videoRes && (
+          <video
+            key={videoRes.url}
+            src={encodeURI(videoRes.url)}
+            controls
+            autoPlay
+            style={{ display: 'block', width: '100%', maxHeight: '70vh' }}
+          />
+        )}
+      </Modal>
     </>
-  );
-}
-
-function PartCard({ part, selected, onClick }: { part: WorkCardPart; selected: boolean; onClick: () => void }) {
-  const status = part.status as PartStatus;
-  const badgeText =
-    status === 'done'
-      ? `检测完成（${part.pass_count ?? 0}合格、${part.fail_count ?? 0}不合格）`
-      : PART_STATUS_LABELS[status] ?? status;
-
-  return (
-    <div
-      className="op-part-card"
-      style={selected ? { borderColor: 'var(--op-accent-light)', boxShadow: '0 0 0 2px rgba(106,159,213,0.3)' } : undefined}
-      onClick={onClick}
-    >
-      <div className="op-part-name">
-        {part.part_name}×{part.quantity}
-      </div>
-      <span className={`op-part-badge ${PART_BADGE_CLASS[status] ?? 'pending'}`}>{badgeText}</span>
-      {part.disposal_result && (
-        <Tag style={{ marginTop: 8 }}>{part.disposal_result}</Tag>
-      )}
-    </div>
   );
 }

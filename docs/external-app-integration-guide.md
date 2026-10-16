@@ -241,17 +241,22 @@ EADAF 管理员为 FMMS 的数据模型（如故障工单、设备台账、维�
 
 ### 调用方式
 
-```http
-GET {base_url}/api/v1/data/{routePath}
-Authorization: Bearer {token}
-```
+每个实体自动生成 4 个 routePath，格式为 `{domain}/{Entity}{Operation}`：
 
-`routePath` 是 API 服务的路由路径（由 EADAF 管理员在创建 API 服务时定义，如 `fmms/faultOrderFind`）。
+| 操作 | Operation 后缀 | HTTP 方法 | 路径 | 请求体 |
+|------|---------------|-----------|------|--------|
+| 查询 | `Find` | GET | `/api/v1/data/{routePath}Find` | 无（参数在 query） |
+| 创建 | `Create` | POST | `/api/v1/data/{routePath}Create` | `{ body: { ...字段 } }` |
+| 更新 | `Update` | PATCH | `/api/v1/data/{routePath}Update/:id` | `{ id, body: { ...字段 } }` |
+| 删除 | `Delete` | DELETE | `/api/v1/data/{routePath}Delete/:id` | 无（`id` 在 URL path） |
+
+> `routePath` 是 API 服务的路由路径（由 EADAF 管理员在创建 API 服务时定义，如 `fmms/production/WorkCard`，自动派生 `WorkCardFind`/`WorkCardCreate` 等）。
+> 更新支持单字段语法 `{ id, field, set }`（如 `{ id, field: "status", set: "completed" }`），多字段用 `{ id, body: {...} }`。
 
 ### 示例：查询故障工单列表
 
 ```http
-GET {base_url}/api/v1/data/fmms/faultOrderFind?page=1&size=10&status=open
+GET {base_url}/api/v1/data/fmms/production/WorkCardFind?limit=10&skip=0&station_type=sorting
 Authorization: Bearer {token}
 ```
 
@@ -262,29 +267,72 @@ Authorization: Bearer {token}
   "code": 200,
   "message": "调用成功",
   "data": {
-    "items": [
-      {
-        "order_no": "GD-2026-0001",
-        "equipment_code": "EQ-001",
-        "fault_desc": "主轴轴承异响",
-        "status": "open",
-        "created_at": "2026-07-10T08:30:00Z"
-      }
-    ],
-    "total": 42
+    "preview": {
+      "count": 6,
+      "items": [
+        {
+          "id": "a1b2c3d4-...",
+          "card_code": "WC-2026-0001",
+          "status": "completed",
+          "station_type": "sorting",
+          "created_at": "2026-07-10T08:30:00Z"
+        }
+      ]
+    }
   }
 }
 ```
 
+> Find 响应的 `data` 为 EADAF 执行报告对象，业务记录在 `data.preview.items`，总数在 `data.preview.count`。客户端应兼容 `{items,total}` / 裸数组 / `{preview:{items,count}}` 三种形态。
+
+### 示例：创建 / 更新 / 删除
+
+```http
+POST {base_url}/api/v1/data/fmms/production/WorkCardCreate
+Authorization: Bearer {token}
+Content-Type: application/json
+
+{ "body": { "card_code": "WC-2026-0002", "status": "unaccepted", "station_type": "repair" } }
+```
+
+创建响应 `data` 包裹实体：`{ "data": { "item": { ...创建的记录 } } }`
+
+```http
+PATCH {base_url}/api/v1/data/fmms/production/WorkCardUpdate/:id
+Authorization: Bearer {token}
+
+{ "id": ":id", "body": { "status": "processing", "progress": 50 } }
+```
+
+```http
+DELETE {base_url}/api/v1/data/fmms/production/WorkCardDelete/:id
+Authorization: Bearer {token}
+```
+
+> 删除请求**无 body**，`id` 仅通过 URL path 传递。
+
 ### 参数传递
 
-参数可通过三种方式传递：
+Find 查询参数：
 
-| 方式 | 示例 | 适用场景 |
-|------|------|---------|
-| Query 参数 | `?page=1&status=open` | GET 请求，简单过滤 |
-| JSON Body | `{"status": "open", "level": "urgent"}` | POST 请求 |
-| parameters 嵌套 | `{"parameters": {"status": "open"}}` | POST 请求（推荐） |
+| 参数 | 位置 | 示例 | 说明 |
+|------|------|------|------|
+| `limit` | query | `?limit=20` | 每页条数，默认 20，最大 100 |
+| `skip` | query | `?skip=0` | 分页起始位置，默认 0 |
+| 字段级参数 | query | `?status=completed&station_type=sorting` | 各实体在 Find 中暴露的可过滤字段（见 apis.json） |
+| `filter` | query | `?filter={"status":"pending"}` | 过滤条件对象（JSON 字符串），支持与字段级参数等价过滤 |
+
+**过滤规则（重要）：**
+
+- **两种过滤方式等价可用**：
+  - 顶层字段级参数：`?status=pending`
+  - filter 对象：`?filter={"status":"pending"}`
+- **顶层参数优先级更高**：若同时传顶层 `status` 与 `filter.status`，以顶层 `status` 为准。
+- **如无必要尽量使用顶层参数**（更简洁，URL 可读性更好）。
+- filter 对象支持多字段：`?filter={"status":"pending","station_type":"sorting"}`。
+- **不参与过滤的字段不要传**：省略即代表「全部」。部分字段（如 `status`）有枚举校验，传空串会被拒（`400 Invalid option`），因此只下发有实际值的字段。
+
+> 仅用 `limit`/`skip` 调用即可拉取全部记录；需要过滤时按字段下发顶层参数。FMMS BFF 的 `EADAFClient.find()` 已自动只下发有值的字段参数。
 
 ### SSE 流式查询
 
@@ -411,6 +459,46 @@ GET {base_url}/api/v1/applications-public/{key}/api-catalog
 ```
 
 `key` 可以是应用 code（`FMMS`）或 `application_id`。
+
+### apis.json（OpenAPI 3.0.3 规范）
+
+更推荐使用 `apis.json` 端点获取机器可读的 API 契约（OpenAPI 3.0.3 格式）：
+
+```http
+GET {base_url}/api/v1/applications-public/{key}/apis.json
+```
+
+返回标准 OpenAPI 规范文档，顶层结构：
+
+```json
+{
+  "openapi": "3.0.3",
+  "info": { "title": "故检修理管理系统 API", "version": "1.0.0" },
+  "tags": [ "工卡 - 列表查询", "工卡 - 创建", ... ],
+  "paths": {
+    "/api/v1/data/fmms/production/WorkCardFind": {
+      "get": {
+        "operationId": "fmms:production:WorkCardFind_find",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "maximum": 100, "default": 20 } },
+          { "name": "skip", "in": "query", "schema": { "type": "integer", "default": 0 } },
+          { "name": "filter", "in": "query", "schema": { "type": "object", "additionalProperties": true } },
+          { "name": "status", "in": "query" }, { "name": "station_type", "in": "query" }
+        ],
+        "responses": { "200": { ... } }
+      }
+    },
+    "/api/v1/data/fmms/production/WorkCardCreate": { "post": { ... } },
+    "/api/v1/data/fmms/production/WorkCardUpdate/:id": { "patch": { ... } },
+    "/api/v1/data/fmms/production/WorkCardDelete/:id": { "delete": { ... } }
+  },
+  "exceptionResponses": [ { "code": 401, ... }, { "code": 403, ... }, ... ]
+}
+```
+
+> 每个 `{Entity}` 自动派生 `Find`/`Create`/`Update`/`Delete` 四个路径；`paths` 还包含内置 API（`/api/v1/users`、`/api/v1/departments`、`/api/v1/storage/*`）。`operationId` 命名规则为 `{domain}:{Entity}{Operation}_{verb}`（如 `fmms:production:WorkCardFind_find`）。
+>
+> **`/exceptionResponses`** 集中描述 401/403/404/409/500 等异常响应结构，供各 operation 的 `default` 响应引用。
 
 ### 返回内容
 
@@ -691,6 +779,6 @@ public class EadafClient {
 
 ---
 
-> **文档版本**：2026-07-10
+> **文档版本**：2026-07-16（更新 apis.json OpenAPI 3.0.3 规范：Find `filter` JSON 查询参数、Create 响应 `data.item`、Delete 无 body）
 > **适用 EADAF 版本**：当前开发版
 > **如有疑问**：联系 EADAF 平台管理员

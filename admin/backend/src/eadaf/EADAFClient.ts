@@ -24,6 +24,8 @@ export interface FindParams {
 export interface FindResult<T> {
   items: T[];
   total: number;
+  page?: number;
+  size?: number;
 }
 
 interface TokenCache {
@@ -117,14 +119,35 @@ export class EADAFClient {
   /**
    * 查询 (Find)
    *
-   * EADAF Find 是 GET，filter 参数在 schema 中定义为 object 类型，
-   * 通过 URL query string 传 JSON 字符串会被校验拒绝（expected record, received string）。
-   * 因此：Find 只传 limit/skip 分页，不传 filter；复杂过滤在调用方（repos）做客户端过滤。
+   * GET /api/v1/data/{routePath}Find?limit=&skip=&{字段级参数}
+   *
+   * 过滤规则（对齐 EADAF 平台约定）：
+   * - 优先使用顶层字段级参数（如 ?status=completed&station_type=sorting），简洁高效。
+   * - 也支持 filter 对象（如 filter={"status":"pending"}），但顶层参数优先级更高
+   *   ——若同时传 status 与 filter.status，以顶层 status 为准。
+   * - 如无必要尽量使用顶层参数。
+   * - **不参与过滤的字段不要传**：省略即代表「全部」。部分字段（如 status）有枚举校验，
+   *   传空串会被拒（400 Invalid option），因此只下发有实际值的字段。
+   *
+   * 实现说明：params.filter 中的字段映射为顶层字段级参数（仅非空值），params.status
+   * 作为 status 字段便捷入口并覆盖 filter.status。
    */
   async find<T>(routePath: string, params: FindParams = {}): Promise<FindResult<T>> {
     const query = new URLSearchParams();
-    if (params.limit != null) query.set('limit', String(params.limit));
+    // EADAF Find 的 limit 上限为 100（apis.json: maximum 100），超过会 400
+    if (params.limit != null) query.set('limit', String(Math.min(params.limit, 100)));
     if (params.skip != null) query.set('skip', String(params.skip));
+    if (params.filter) {
+      for (const [field, val] of Object.entries(params.filter)) {
+        if (val != null && val !== '') {
+          // 顶层 status 优先于 filter.status
+          if (field === 'status' && params.status != null) continue;
+          query.set(field, String(val));
+        }
+      }
+    }
+    // 顶层 status 便捷入口（覆盖 filter.status）
+    if (params.status) query.set('status', params.status);
     const qs = query.toString();
     const res = await this.authedFetch(`/api/v1/data/${routePath}Find${qs ? `?${qs}` : ''}`);
     const json = (await res.json()) as EadafEnvelope<FindResult<T> | T[]>;
@@ -133,38 +156,38 @@ export class EADAFClient {
   }
 
   /**
-   * 查询并在客户端按 filter 过滤
-   * （EADAF Find 不支持 URL 传 filter object，拉取后本地过滤）
+   * 查询并按 filter 过滤（服务端字段级过滤）。
+   *
+   * filter 中的字段（非空值）经 find() 下发为顶层字段级参数，真正的服务端过滤；
+   * 顶层 status 优先级高于 filter.status。
    */
   async findFiltered<T>(
     routePath: string,
     filter: Record<string, unknown>,
     params: Omit<FindParams, 'filter'> = {},
   ): Promise<FindResult<T>> {
-    const result = await this.find<T>(routePath, { ...params, limit: 100 });
-    const items = result.items.filter((item) =>
-      Object.entries(filter).every(([key, val]) => {
-        const itemVal = (item as Record<string, unknown>)[key];
-        // 模糊匹配：string includes，其他严格相等
-        if (typeof val === 'string' && typeof itemVal === 'string') {
-          return itemVal === val || itemVal.includes(val);
-        }
-        return itemVal === val;
-      }),
-    );
-    return { items, total: items.length };
+    return this.find<T>(routePath, { ...params, filter, limit: params.limit ?? 100 });
   }
 
-  /** 创建 (Create) — body 包在 { body: {...} } 里；id 需调用方提供（EADAF 不自动生成） */
-  async create<T>(routePath: string, body: Record<string, unknown>): Promise<T> {
+  /**
+   * 创建 (Create) — body 包在 { body: {...} } 里；snake_case 实体自动补齐时间戳。
+   * 响应 data 结构为 { item: {...} }（所有实体统一），此处解包返回实体本身。
+   */
+  async create<T>(routePath: string, body: Record<string, unknown>, withTimestamps = true): Promise<T> {
+    const now = new Date().toISOString();
+    const payload = withTimestamps
+      ? { ...body, created_at: body.created_at ?? now, updated_at: body.updated_at ?? now }
+      : body;
     const res = await this.authedFetch(`/api/v1/data/${routePath}Create`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ body }),
+      body: JSON.stringify({ body: payload }),
     });
-    const json = (await res.json()) as EadafEnvelope<T>;
+    const json = (await res.json()) as EadafEnvelope<{ item: T } | T>;
     if (!res.ok) throw new EadafError(json.message ?? '创建失败', res.status, json.code);
-    return json.data;
+    // 兼容 { item: T } 与裸 T 两种返回形态
+    const data = json.data as { item?: T } & T;
+    return (data && typeof data === 'object' && 'item' in data ? data.item : data) as T;
   }
 
   /** 更新 (Update) — PATCH /{routePath}Update/:id，body: { id, body: {...} } */
@@ -184,12 +207,10 @@ export class EADAFClient {
     }
   }
 
-  /** 删除 (Delete) — DELETE /{routePath}Delete/:id，body: { id } */
+  /** 删除 (Delete) — DELETE /{routePath}Delete/:id，id 仅在 URL path（无 request body） */
   async deleteOne(routePath: string, id: string): Promise<void> {
     const res = await this.authedFetch(`/api/v1/data/${routePath}Delete/${id}`, {
       method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
     });
     if (!res.ok) {
       const json = (await res.json()) as EadafEnvelope<unknown>;
@@ -253,21 +274,52 @@ export class EadafError extends Error {
   }
 }
 
-/** 统一 Find 结果为 {items, total} — 兼容多种 EADAF 响应格式 */
+/**
+ * 统一 Find 结果为 {items, total, page?, size?} — 兼容多种 EADAF 响应格式。
+ *
+ * 实测部分部署会在外层 envelope 内再包一层 `{ code, message, data: { items, total } }`，
+ * 若不解包则 items 恒为空。
+ */
 function normalizeFindResult<T>(data: unknown): FindResult<T> {
+  let cur: unknown = data;
+  // 剥掉多余的 { code, message, data } 外壳，直到看到列表形态
+  for (let i = 0; i < 3; i++) {
+    if (cur == null || Array.isArray(cur) || typeof cur !== 'object') break;
+    const obj = cur as Record<string, unknown>;
+    if (Array.isArray(obj.items)) break;
+    const preview = obj.preview as Record<string, unknown> | undefined;
+    if (preview && Array.isArray(preview.items)) break;
+    if (obj.data != null && typeof obj.data === 'object') {
+      cur = obj.data;
+      continue;
+    }
+    break;
+  }
+
   // 格式1: 直接数组
-  if (Array.isArray(data)) {
-    return { items: data, total: data.length };
+  if (Array.isArray(cur)) {
+    return { items: cur as T[], total: cur.length };
   }
-  const obj = data as Record<string, unknown>;
-  // 格式2: { items: [...], total: N }
+  if (cur == null || typeof cur !== 'object') {
+    return { items: [], total: 0 };
+  }
+  const obj = cur as Record<string, unknown>;
+  // 格式2: { items: [...], total: N, page?, size? }
   if (Array.isArray(obj.items)) {
-    return { items: obj.items as T[], total: (obj.total as number) ?? (obj.items as T[]).length };
+    return {
+      items: obj.items as T[],
+      total: (obj.total as number) ?? (obj.count as number) ?? (obj.items as T[]).length,
+      page: obj.page as number | undefined,
+      size: obj.size as number | undefined,
+    };
   }
-  // 格式3: EADAF 执行报告 { preview: { items: [...] } }
+  // 格式3: EADAF 执行报告 { preview: { items: [...], count|total } }
   const preview = obj.preview as Record<string, unknown> | undefined;
   if (preview && Array.isArray(preview.items)) {
-    return { items: preview.items as T[], total: (preview.total as number) ?? (preview.items as T[]).length };
+    return {
+      items: preview.items as T[],
+      total: (preview.count as number) ?? (preview.total as number) ?? (preview.items as T[]).length,
+    };
   }
   return { items: [], total: 0 };
 }

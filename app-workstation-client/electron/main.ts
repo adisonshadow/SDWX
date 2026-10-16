@@ -146,6 +146,9 @@ async function openSecondaryWindow(): Promise<BrowserWindow> {
   if (secondaryWindow && !secondaryWindow.isDestroyed()) {
     secondaryWindow.focus();
     await secondaryWindow.loadURL(targetUrl);
+    if (!secondaryWindow.isDestroyed()) {
+      secondaryWindow.setTitle('操作副屏');
+    }
     return secondaryWindow;
   }
 
@@ -158,13 +161,22 @@ async function openSecondaryWindow(): Promise<BrowserWindow> {
     y,
     width,
     height,
+    title: '操作副屏',
     ...initialSecondaryFullscreenOptions(),
-    frame: false,
+    // 保留原生 titleBar：非全屏时可拖拽/关闭；全屏时系统会自动隐藏
     autoHideMenuBar: true,
     webPreferences: opWebPreferences('secondary'),
   });
 
+  // 阻止页面 document.title（index.html「FMMS 故检修理线系统」）覆盖窗口标题
+  secondaryWindow.on('page-title-updated', (e) => {
+    e.preventDefault();
+  });
+
   await secondaryWindow.loadURL(targetUrl);
+  if (!secondaryWindow.isDestroyed()) {
+    secondaryWindow.setTitle('操作副屏');
+  }
 
   secondaryWindow.on('closed', () => {
     secondaryWindow = null;

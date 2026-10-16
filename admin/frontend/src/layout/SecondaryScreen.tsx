@@ -9,11 +9,8 @@ import { Empty } from 'antd';
 import { useOpContext } from './OPContext';
 import { useOPHeader } from './OPHeaderContext';
 import { useLocalConfig } from '../hooks/useLocalConfig';
-import { WORKSTATION_TYPE_LABELS, type WorkstationType } from '@fmms/shared';
-import SortingBoard from '../pages/op/secondary/SortingBoard';
-import InspectionBoard from '../pages/op/secondary/InspectionBoard';
-import RepairBoard from '../pages/op/secondary/RepairBoard';
-import ReceiveBoard from '../pages/op/secondary/ReceiveBoard';
+import { WORKSTATION_TYPE_LABELS } from '@fmms/shared';
+import { renderOpBoard } from './renderOpBoard';
 
 export function SecondaryScreen() {
   const ctx = useOpContext();
@@ -26,22 +23,6 @@ export function SecondaryScreen() {
       ctx.setWorkstationType(config.selected_station_type);
     }
   }, [ctx.workstationType, ctx.setWorkstationType, config?.selected_station_type]);
-
-  const renderBoard = (type: WorkstationType, cardId: string) => {
-    switch (type) {
-      case 'sorting':
-        return <SortingBoard cardId={cardId} />;
-      case 'inspection_small':
-      case 'inspection_large':
-        return <InspectionBoard cardId={cardId} />;
-      case 'repair':
-        return <RepairBoard cardId={cardId} />;
-      case 'receive_send':
-        return <ReceiveBoard cardId={cardId} />;
-      default:
-        return <Empty description={`未支持的工位类型: ${type}`} />;
-    }
-  };
 
   if (!workstationType) {
     return <SecondaryWaiting title="等待主屏选择工位..." headerTitle="副屏" />;
@@ -56,7 +37,7 @@ export function SecondaryScreen() {
     );
   }
 
-  return renderBoard(workstationType, selectedCardId);
+  return renderOpBoard(workstationType, selectedCardId);
 }
 
 function SecondaryWaiting({ title, headerTitle }: { title: string; headerTitle: string }) {

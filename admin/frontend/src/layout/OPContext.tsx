@@ -4,7 +4,7 @@
  * 持有：当前工位类型、选中工卡、选中零件、副屏标签页等。
  * 主屏修改后通过 BroadcastChannel 广播给副屏。
  */
-import { createContext, useCallback, useContext, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 import { OP_SCREEN_CHANNEL } from '@fmms/shared';
 import type { WorkstationType } from '@fmms/shared';
 
@@ -13,14 +13,22 @@ interface OPState {
   selectedCardId: string | undefined;
   selectedPartId: string | undefined;
   secondaryTab: string | undefined;
+  /** 副屏窗口是否在线（主屏据此决定是否在「次屏区域」内嵌看板） */
+  secondaryOnline: boolean;
+  /** 进入设备注册页（由 MainScreen 注册，More 弹窗触发） */
+  requestRegister?: () => void;
   setWorkstationType: (t: WorkstationType | undefined) => void;
   setSelectedCardId: (id: string | undefined) => void;
   setSelectedPartId: (id: string | undefined) => void;
   setSecondaryTab: (tab: string | undefined) => void;
+  setSecondaryOnline: (online: boolean) => void;
+  setRequestRegister: (fn: (() => void) | undefined) => void;
   /** 广播选中工卡 (主屏调用，副屏监听) */
   broadcastSelectCard: (workCardId: string, workstationType: WorkstationType) => void;
   /** 广播取消工卡选择 (主屏返回列表时) */
   broadcastDeselectCard: () => void;
+  /** 广播切换工位类型（主屏切换后同步副屏） */
+  broadcastSwitchStation: (workstationType: WorkstationType | undefined) => void;
   broadcastSelectPart: (partId: string) => void;
 }
 
@@ -31,6 +39,13 @@ export function OPProvider({ children }: { children: ReactNode }) {
   const [selectedCardId, setSelectedCardId] = useState<string | undefined>(undefined);
   const [selectedPartId, setSelectedPartId] = useState<string | undefined>(undefined);
   const [secondaryTab, setSecondaryTab] = useState<string | undefined>(undefined);
+  const [secondaryOnline, setSecondaryOnline] = useState(false);
+  const [requestRegister, setRequestRegisterState] = useState<(() => void) | undefined>(undefined);
+
+  // 包装 setter：避免把回调函数误当成 React 的 state updater
+  const setRequestRegister = useCallback((fn: (() => void) | undefined) => {
+    setRequestRegisterState(() => fn);
+  }, []);
 
   const broadcast = useCallback((event: string, payload: Record<string, unknown>) => {
     if (typeof BroadcastChannel === 'undefined') return;
@@ -50,6 +65,13 @@ export function OPProvider({ children }: { children: ReactNode }) {
     broadcast('deselectCard', {});
   }, [broadcast]);
 
+  const broadcastSwitchStation = useCallback(
+    (wst: WorkstationType | undefined) => {
+      broadcast('switchStation', { workstationType: wst });
+    },
+    [broadcast],
+  );
+
   const broadcastSelectPart = useCallback(
     (partId: string) => {
       broadcast('selectPart', { partId });
@@ -57,19 +79,39 @@ export function OPProvider({ children }: { children: ReactNode }) {
     [broadcast],
   );
 
-  const value: OPState = {
-    workstationType,
-    selectedCardId,
-    selectedPartId,
-    secondaryTab,
-    setWorkstationType,
-    setSelectedCardId,
-    setSelectedPartId,
-    setSecondaryTab,
-    broadcastSelectCard,
-    broadcastDeselectCard,
-    broadcastSelectPart,
-  };
+  const value = useMemo<OPState>(
+    () => ({
+      workstationType,
+      selectedCardId,
+      selectedPartId,
+      secondaryTab,
+      secondaryOnline,
+      requestRegister,
+      setWorkstationType,
+      setSelectedCardId,
+      setSelectedPartId,
+      setSecondaryTab,
+      setSecondaryOnline,
+      setRequestRegister,
+      broadcastSelectCard,
+      broadcastDeselectCard,
+      broadcastSwitchStation,
+      broadcastSelectPart,
+    }),
+    [
+      workstationType,
+      selectedCardId,
+      selectedPartId,
+      secondaryTab,
+      secondaryOnline,
+      requestRegister,
+      setRequestRegister,
+      broadcastSelectCard,
+      broadcastDeselectCard,
+      broadcastSwitchStation,
+      broadcastSelectPart,
+    ],
+  );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

@@ -28,7 +28,10 @@ const SEED_ENTITY_ROUTES: Record<string, string> = {
   MeasuringTool: EADAF_ROUTES.measuringTool,
   LineStock: EADAF_ROUTES.lineStock,
   WorkCard: EADAF_ROUTES.workCard,
+  WorkCardPart: EADAF_ROUTES.workCardPart,
   InspectionItem: EADAF_ROUTES.inspectionItem,
+  InspectionRecord: EADAF_ROUTES.inspectionRecord,
+  WorkStep: EADAF_ROUTES.workStep,
 };
 
 async function getToken() {
@@ -115,8 +118,8 @@ async function main() {
 
   // ============ 工卡（每个工位 × 4 种状态）============
   console.log('\n=== 创建工卡（每工位 4 种状态）===');
-  const statuses = ['unaccepted', 'pending', 'processing', 'completed'] as const;
-  const statusLabels = { unaccepted: '新任务', pending: '待处理', processing: '进行中', completed: '已完成' };
+  const statuses = ['pending', 'in_progress', 'completed', 'cancelled'] as const;
+  const statusLabels = { pending: '待执行', in_progress: '执行中', completed: '已完成', cancelled: '已取消' };
   const operators = ['张伟', '李强', '王芳', '赵明'];
 
   const stationConfigs = [
@@ -128,12 +131,14 @@ async function main() {
   ];
 
   let counter = 1;
+  const createdCardIds: Array<{ id: string; type: string; wbs?: string; parts: number }> = [];
   for (const sc of stationConfigs) {
     for (let i = 0; i < statuses.length; i++) {
       const status = statuses[i];
       const code = `WC-${sc.prefix}-2026-${String(counter++).padStart(3, '0')}`;
+      const cardId = id('wc');
       const fields: Record<string, unknown> = {
-        id: id('wc'),
+        id: cardId,
         card_code: code,
         card_name: `${sc.product} — ${statusLabels[status]}`,
         station_type: sc.type,
@@ -142,12 +147,12 @@ async function main() {
         product_name: sc.product,
         batch_no: `B2026-${String(counter % 12 + 1).padStart(2, '0')}`,
         serial_no: `SN-${100 + counter}`,
-        progress: status === 'processing' ? [25, 50, 75][i % 3] : status === 'completed' ? 100 : 0,
+        progress: status === 'in_progress' ? [25, 50, 75][i % 3] : status === 'completed' ? 100 : 0,
         total_parts: sc.parts,
         source: 'mock',
       };
       if (sc.wbs) fields.wbs_node_id = sc.wbs;
-      if (status !== 'unaccepted') {
+      if (status !== 'pending') {
         fields.accept_operator_name = operators[i];
         fields.accept_operator_id = `op-${i + 1}`;
         fields.accept_time = `2026-07-10T0${8 + i}:00:00Z`;
@@ -160,6 +165,9 @@ async function main() {
       }
       const r = await create(token, 'WorkCard', { ...fields, created_at: now, updated_at: now });
       console.log(`  ${r.code === 200 ? '✓' : '✗'} ${code} | ${sc.type} | ${status}`);
+      if (r.code === 200 && sc.parts > 0) {
+        createdCardIds.push({ id: cardId, type: sc.type, wbs: sc.wbs, parts: sc.parts });
+      }
     }
   }
 
@@ -177,6 +185,62 @@ async function main() {
   for (const it of insItems) {
     const r = await create(token, 'InspectionItem', { id: id('ii'), wbs_node_id: wbsInsId, ...it, created_at: now, updated_at: now });
     console.log(`  ${r.code === 200 ? '✓' : '✗'} ${it.item_code} ${it.item_name}`);
+  }
+
+  // ============ 工步（故检 WBS）============
+  console.log('\n=== 创建工步 ===');
+  const steps = [
+    { step_code: 'STEP-001', step_name: '外观检查', operation_content: '目视检查零件表面', sort_order: 1 },
+    { step_code: 'STEP-002', step_name: '尺寸测量', operation_content: '按检测项逐项测量', sort_order: 2 },
+  ];
+  for (const s of steps) {
+    const r = await create(token, 'WorkStep', { id: id('ws'), wbs_node_id: wbsInsId, ...s, created_at: now, updated_at: now });
+    console.log(`  ${r.code === 200 ? '✓' : '✗'} ${s.step_code} ${s.step_name}`);
+  }
+
+  // ============ 工卡零部件（分拣/故检工卡）============
+  console.log('\n=== 创建工卡零部件 ===');
+  const partNames = ['活塞杆', '密封圈', '导向套', '阀体', '弹簧', '垫片', '螺母', '螺栓'];
+  for (const card of createdCardIds.filter((c) => c.parts > 0)) {
+    for (let i = 0; i < card.parts; i++) {
+      const partCode = `P-${card.type.toUpperCase().slice(0, 3)}-${String(i + 1).padStart(3, '0')}`;
+      const r = await create(token, 'WorkCardPart', {
+        id: id('wcp'),
+        work_card_id: card.id,
+        part_code: partCode,
+        part_name: partNames[i % partNames.length],
+        quantity: 1,
+        status: 'pending',
+        sort_order: i + 1,
+        created_at: now,
+        updated_at: now,
+      });
+      console.log(`  ${r.code === 200 ? '✓' : '✗'} ${partCode} → ${card.id.slice(0, 8)}`);
+    }
+  }
+
+  // ============ 检测记录样例（processing 故检工卡）============
+  console.log('\n=== 创建检测记录样例 ===');
+  const processingInsCard = createdCardIds.find((c) => c.type === 'inspection_small');
+  if (processingInsCard) {
+    const sampleResults = [
+      { item_code: 'INS-001', result: 'qualified', measured_value: 25.01 },
+      { item_code: 'INS-002', result: 'qualified', measured_value: 0.012 },
+    ];
+    for (const sr of sampleResults) {
+      const r = await create(token, 'InspectionRecord', {
+        id: id('ir'),
+        work_card_id: processingInsCard.id,
+        measure_tool_code: 'MT-001',
+        result: sr.result,
+        measured_value: sr.measured_value,
+        is_manual: false,
+        inspect_time: now,
+        created_at: now,
+        updated_at: now,
+      });
+      console.log(`  ${r.code === 200 ? '✓' : '✗'} ${sr.item_code} ${sr.result}`);
+    }
   }
 
   console.log('\n=== 种子数据写入完成 ===');

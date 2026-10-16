@@ -13,12 +13,12 @@
 ### 1.1 routePath 规则
 每个实体自动生成 4 个 routePath，格式为 `{domain}/{Entity}{Operation}`：
 
-| 操作 | Operation 后缀 | HTTP 方法 | 说明 |
-|------|---------------|-----------|------|
-| 查询 | `Find` | GET | 分页查询，参数 `limit`/`skip`/`filter`/`status` |
-| 创建 | `Create` | POST | body 为记录字段 |
-| 更新 | `Update` | PATCH | 单字段更新 `{id, field, set}` |
-| 删除 | `Delete` | DELETE | 按 `id` 删除 |
+| 操作 | Operation 后缀 | HTTP 方法 | 路径 | 说明 |
+|------|---------------|-----------|------|------|
+| 查询 | `Find` | GET | `/api/v1/data/{routePath}Find` | 分页查询，参数 `limit`/`skip`/`filter`/字段级过滤 |
+| 创建 | `Create` | POST | `/api/v1/data/{routePath}Create` | body 为 `{ body: { ...字段 } }`，响应 `data.item` 返回创建记录 |
+| 更新 | `Update` | PATCH | `/api/v1/data/{routePath}Update/:id` | 多字段 `{ id, body: {...} }`；单字段 `{ id, field, set }` |
+| 删除 | `Delete` | DELETE | `/api/v1/data/{routePath}Delete/:id` | `id` 在 URL path，无 body |
 
 > ⚠️ 当前**无 `aggregate` 操作**；统计需 find 后客户端聚合或后续申请。
 
@@ -29,12 +29,17 @@
 
 ### 1.3 调用方式
 ```
-GET  /api/v1/data/{routePath}?limit=20&skip=0&filter={"status":"in_progress"}
-POST /api/v1/data/{routePath}          body: { ...字段 }
-PATCH /api/v1/data/{routePath}         body: { id, field, set }
-DELETE /api/v1/data/{routePath}?id={id}
+GET    /api/v1/data/{routePath}Find?limit=20&skip=0&status=in_progress
+POST   /api/v1/data/{routePath}Create                 body: { body: { ...字段 } }
+PATCH  /api/v1/data/{routePath}Update/{id}            body: { id, body: { ...字段 } }   # 或 { id, field, set }
+DELETE /api/v1/data/{routePath}Delete/{id}
 Header: Authorization: Bearer {application_token}
 ```
+
+- **过滤**：优先使用顶层字段级参数（`?status=x&station_type=y`）；也支持 filter 对象（`filter={"status":"x"}`），但顶层参数优先级更高，如无必要尽量用顶层参数
+- Find 响应 `data`：执行报告形态 `{ preview: { count, items } }`（客户端兼容 `{items,total}` / 裸数组）
+- Create 响应 `data`：`{ item: { ...创建的记录 } }`
+- 删除请求无 body，`id` 仅通过 URL path 传递
 
 响应统一封装：`{ code: 200, message: "success", data: {...} }`
 
@@ -83,10 +88,15 @@ NotificationLog (呼叫日志, 独立)
 |------|---------------|------|---------|
 | WorkCard | `production/WorkCard` | 工卡 | card_no, status, work_order_id |
 | WorkStep | `production/WorkStep` | 工步 | work_card_id, step_no, standard_value |
-| InspectionRecord | `production/InspectionRecord` | 检验记录 | work_step_id, measuring_tool_id, measured_value |
 | MeasuringTool | `production/MeasuringTool` | 测量工具 | code, tool_type, status |
 | LineStock | `production/LineStock` | 线边库 | code, name, status |
 | LineStockItem | `production/LineStockItem` | 线边库物料项 | line_stock_id, material_code, quantity |
+
+### quality 域（snake_case，对齐 apis.json `fmms/quality`）
+| 实体 | routePath 前缀 | 说明 | 关键字段 |
+|------|---------------|------|---------|
+| InspectionItem | `quality/InspectionItem` | 检测项 | item_code, wbs_node_id, nominal_value, tolerances |
+| InspectionRecord | `quality/InspectionRecord` | 检测记录 | work_card_id, inspection_item_id, measured_value, result |
 
 ### equipment 域（snake_case）
 | 实体 | routePath 前缀 | 说明 |
@@ -236,7 +246,7 @@ NotificationLog (呼叫日志, 独立)
 
 **判异规则**（前端/BFF 实现）：`nominal_value + lower_tolerance ≤ 实测值 ≤ nominal_value + upper_tolerance` → 合格，否则不合格。
 
-**routePath**：`production/InspectionItem{Find|Create|Update|Delete}`
+**routePath**：`fmms/quality/InspectionItem{Find|Create|Update|Delete}`
 
 ---
 
@@ -401,7 +411,8 @@ NotificationLog (呼叫日志, 独立)
 |------|------|--------|--------|--------|
 | WorkCard | `production/WorkCardFind` | `production/WorkCardCreate` | `production/WorkCardUpdate` | `production/WorkCardDelete` |
 | WorkStep | `production/WorkStepFind` | ... | ... | ... |
-| InspectionRecord | `production/InspectionRecordFind` | ... | ... | ... |
+| InspectionItem | `quality/InspectionItemFind` | `quality/InspectionItemCreate` | `quality/InspectionItemUpdate` | `quality/InspectionItemDelete` |
+| InspectionRecord | `quality/InspectionRecordFind` | `quality/InspectionRecordCreate` | `quality/InspectionRecordUpdate` | `quality/InspectionRecordDelete` |
 | MeasuringTool | `production/MeasuringToolFind` | ... | ... | ... |
 | LineStock | `production/LineStockFind` | ... | ... | ... |
 | LineStockItem | `production/LineStockItemFind` | ... | ... | ... |
@@ -416,7 +427,6 @@ NotificationLog (呼叫日志, 独立)
 |------|------|--------|--------|--------|
 | Workstation | `production/WorkstationFind` | `production/WorkstationCreate` | `production/WorkstationUpdate` | `production/WorkstationDelete` |
 | WorkCardPart | `production/WorkCardPartFind` | `production/WorkCardPartCreate` | `production/WorkCardPartUpdate` | `production/WorkCardPartDelete` |
-| InspectionItem | `production/InspectionItemFind` | `production/InspectionItemCreate` | `production/InspectionItemUpdate` | `production/InspectionItemDelete` |
 | OutsourceOrder | `production/OutsourceOrderFind` | `production/OutsourceOrderCreate` | `production/OutsourceOrderUpdate` | `production/OutsourceOrderDelete` |
 | ScrapRecord | `production/ScrapRecordFind` | `production/ScrapRecordCreate` | `production/ScrapRecordUpdate` | `production/ScrapRecordDelete` |
 | InventoryTransaction | `production/InventoryTransactionFind` | `production/InventoryTransactionCreate` | `production/InventoryTransactionUpdate` | `production/InventoryTransactionDelete` |

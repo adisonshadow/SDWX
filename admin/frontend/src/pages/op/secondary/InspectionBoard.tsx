@@ -1,39 +1,43 @@
 /**
- * InspectionBoard — 故检副屏：按设备分组检测表 + 判异 + 采集 + 照片
+ * InspectionBoard — 故检副屏：检测执行 + 不合格处置分类
  *
- * 参考 5702demo inspect 页：
- * - 按测量工具(measure_tool_code)分组，每组一个 section
- * - 表格列：检测项 | 工艺值 | 公差 | 测量值(大输入) | 是否合格 | 照片
- * - 自动判异：nominal + lower ≤ 实测 ≤ nominal + upper
- * - 采集数据经 WS 自动填入
- * - 保存到 WorkCard.inspection_result JSON
+ * - 检测页：按设备分组检测表 + 判异 + 采集
+ * - 有合格/不合格判定后，header「AGV」前出现「处置」按钮
+ * - 处置页：列出已判定项，三类分类 + 底部流转条码（可返回检测页）
  */
-import { useEffect, useState, useMemo } from 'react';
-import { Spin, Empty, Button, InputNumber, Space, App } from 'antd';
-import { SaveOutlined, CameraOutlined } from '@ant-design/icons';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { Spin, Empty, Button, InputNumber, Space, App, Radio } from 'antd';
+import { CheckCircleOutlined, CameraOutlined, PartitionOutlined } from '@ant-design/icons';
 import { useOPHeader } from '../../../layout/OPHeaderContext';
 import { fetchInspectionItems, saveInspectionResult, fetchWorkCardDetail } from '../../../api/opApi';
 import { useOpContext } from '../../../layout/OPContext';
 import { useOpWs } from '../../../hooks/useOpWs';
-import type { InspectionItem, WorkCard, InspectionResultData, InspectionResultItem, InspectionResult as ResultType } from '@fmms/shared';
+import { useOpCardHeaderActions } from '../../../hooks/useOpCardHeaderActions';
+import InspectionDisposal from './InspectionDisposal';
+import type {
+  InspectionItem,
+  InspectionResultData,
+  InspectionResultItem,
+  InspectionResult as ResultType,
+} from '@fmms/shared';
+import type { OPHeaderButton } from '../../../components/OPHeader';
+
+type ViewMode = 'inspect' | 'disposal';
 
 export default function InspectionBoard({ cardId }: { cardId: string }) {
   const { message } = App.useApp();
   const ctx = useOpContext();
+  const [view, setView] = useState<ViewMode>('inspect');
   const [items, setItems] = useState<InspectionItem[]>([]);
-  const [card, setCard] = useState<WorkCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [values, setValues] = useState<Record<string, number | undefined>>({});
   const [results, setResults] = useState<Record<string, ResultType>>({});
   const [saving, setSaving] = useState(false);
 
-  // WS 监听采集数据
   useOpWs(ctx.selectedPartId ?? cardId, (msg) => {
     if (msg.type === 'collect.frame') {
       const payload = msg.payload as { tool_code?: string; item_code?: string; raw?: string };
-      // 匹配 item_code 填值（实际由 BFF 解析 raw 得 measured_value，这里简化）
       if (payload.item_code) {
-        // 尝试从 raw 解析数值（mock 格式: "MOCK,count,value,ts"）
         const match = payload.raw?.match(/([\d.]+)/g);
         if (match && match.length >= 3) {
           const val = parseFloat(match[2]);
@@ -47,27 +51,18 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
 
   const load = () => {
     setLoading(true);
-    Promise.all([
-      fetchWorkCardDetail(cardId),
-    ])
-      .then(async ([detail]) => {
-        setCard(detail.work_card);
-        // 加载检测项（按 WBS 节点）
-        const wbsNodeId = detail.work_card.wbs_node_id;
-        if (wbsNodeId) {
-          const itemsRes = await fetchInspectionItems({ wbsNodeId });
-          setItems(itemsRes.items);
-          // 从已有检测结果恢复
-          if (detail.work_card.inspection_result?.items) {
-            const restoredVals: Record<string, number | undefined> = {};
-            const restoredResults: Record<string, ResultType> = {};
-            for (const r of detail.work_card.inspection_result.items) {
-              restoredVals[r.item_code] = r.measured_value;
-              restoredResults[r.item_code] = r.result;
-            }
-            setValues(restoredVals);
-            setResults(restoredResults);
+    Promise.all([fetchWorkCardDetail(cardId), fetchInspectionItems({ workCardId: cardId })])
+      .then(([detail, itemsRes]) => {
+        setItems(itemsRes.items);
+        if (detail.work_card.inspection_result?.items) {
+          const restoredVals: Record<string, number | undefined> = {};
+          const restoredResults: Record<string, ResultType> = {};
+          for (const r of detail.work_card.inspection_result.items) {
+            restoredVals[r.item_code] = r.measured_value;
+            restoredResults[r.item_code] = r.result;
           }
+          setValues(restoredVals);
+          setResults(restoredResults);
         }
       })
       .catch((e) => message.error(`加载失败: ${e.message}`))
@@ -75,11 +70,11 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
   };
 
   useEffect(() => {
+    setView('inspect');
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cardId]);
 
-  /** 判异 */
   const judge = (item: InspectionItem, val: number): ResultType => {
     const nominal = item.nominal_value ?? 0;
     const lower = item.lower_tolerance ?? 0;
@@ -100,7 +95,7 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
     setResults((prev) => ({ ...prev, [itemCode]: result }));
   };
 
-  const handleSave = async () => {
+  const handleSave = useCallback(async () => {
     const resultItems: InspectionResultItem[] = items.map((item) => ({
       item_code: item.item_code,
       measured_value: values[item.item_code],
@@ -117,15 +112,41 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
     setSaving(true);
     try {
       await saveInspectionResult(cardId, data);
-      message.success(`检测结果已保存（${summary.qualified}合格 / ${summary.unqualified}不合格 / ${summary.pending}待检）`);
+      message.success(
+        `检测结果已提交（${summary.qualified}合格 / ${summary.unqualified}不合格 / ${summary.pending}待检）`,
+      );
     } catch (e) {
-      message.error(`保存失败: ${(e as Error).message}`);
+      message.error(`提交失败: ${(e as Error).message}`);
     } finally {
       setSaving(false);
     }
-  };
+  }, [cardId, items, message, results, values]);
 
-  // 按 measure_tool_code 分组
+  const hasJudged = useMemo(
+    () => Object.values(results).some((r) => r === 'qualified' || r === 'unqualified'),
+    [results],
+  );
+
+  const goDisposal = useCallback(() => setView('disposal'), []);
+  const goInspect = useCallback(() => setView('inspect'), []);
+
+  const prependButtons = useMemo<OPHeaderButton[]>(() => {
+    if (view !== 'inspect' || !hasJudged) return [];
+    return [
+      {
+        key: 'disposal',
+        label: '处置',
+        icon: <PartitionOutlined />,
+        onClick: goDisposal,
+      },
+    ];
+  }, [view, hasJudged, goDisposal]);
+
+  const { rightButtons, agvModal } = useOpCardHeaderActions(cardId, {
+    onSubmit: handleSave,
+    prependButtons,
+  });
+
   const groups = useMemo(() => {
     const map = new Map<string, InspectionItem[]>();
     for (const item of items) {
@@ -136,37 +157,48 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
     return Array.from(map.entries());
   }, [items]);
 
-  const headerTitle =
-    items.length === 0
-      ? '故检工作台'
-      : `${card?.product_name ?? '故检'} — ${card?.card_code ?? ''}`;
-
-  const rightButtons = useMemo(
-    () =>
-      items.length > 0
-        ? [{ key: 'save', label: '保存', icon: <SaveOutlined />, onClick: handleSave }]
-        : undefined,
-    [items.length, saving],
-  );
-
   useOPHeader({
-    title: loading ? '故检工作台' : headerTitle,
-    rightButtons,
+    isPutTitleLeft: true,
+    title: view === 'disposal' ? '故检处置' : '故检检测',
+    onBack: view === 'disposal' ? goInspect : undefined,
+    rightButtons: view === 'disposal'
+      ? rightButtons.filter((b) => b.key === 'agv')
+      : rightButtons,
   });
 
   if (loading) {
     return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 48 }}>
-        <Spin size="large" />
-      </div>
+      <>
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', padding: 48 }}>
+          <Spin size="large" />
+        </div>
+        {agvModal}
+      </>
     );
   }
 
   if (items.length === 0) {
     return (
-      <div className="op-body">
-        <Empty description="该工卡暂无检测项（检查 WBS 节点是否关联检测项）" />
-      </div>
+      <>
+        <div className="op-body">
+          <Empty description="该工卡暂无检测项（请检查工步或零件是否已关联检测项）" />
+        </div>
+        {agvModal}
+      </>
+    );
+  }
+
+  if (view === 'disposal') {
+    return (
+      <>
+        <InspectionDisposal
+          cardId={cardId}
+          items={items}
+          results={results}
+          values={values}
+        />
+        {agvModal}
+      </>
     );
   }
 
@@ -220,22 +252,21 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
                       </td>
                       <td style={{ padding: '14px 12px', borderBottom: '1px solid var(--op-border-subtle)' }}>
                         <Space wrap>
-                          {result && (
-                            <span className={result === 'qualified' ? 'op-qualified-y' : 'op-qualified-n'}>
-                              {result === 'qualified' ? '合格' : '不合格'}
-                            </span>
-                          )}
-                          {!isAuto && (
-                            <>
-                              <Button size="small" type="primary" onClick={() => handleManualJudge(item.item_code, 'qualified')}>
-                                合格
-                              </Button>
-                              <Button size="small" danger onClick={() => handleManualJudge(item.item_code, 'unqualified')}>
-                                不合格
-                              </Button>
-                            </>
-                          )}
-                          {item.require_photo && (
+                          <Radio.Group
+                            className={`op-judge-radio${
+                              result === 'unqualified' ? ' is-unqualified' : result === 'qualified' ? ' is-qualified' : ''
+                            }`}
+                            optionType="button"
+                            buttonStyle="solid"
+                            size="large"
+                            value={result === 'qualified' || result === 'unqualified' ? result : undefined}
+                            onChange={(e) => handleManualJudge(item.item_code, e.target.value as ResultType)}
+                            options={[
+                              { label: '合格', value: 'qualified' },
+                              { label: '不合格', value: 'unqualified' },
+                            ]}
+                          />
+                          {result === 'unqualified' && (
                             <Button size="small" icon={<CameraOutlined />} onClick={() => message.info('拍照（待接 EADAF storage 上传）')}>
                               拍照
                             </Button>
@@ -251,11 +282,11 @@ export default function InspectionBoard({ cardId }: { cardId: string }) {
         ))}
       </div>
 
-      {/* 悬浮保存按钮 */}
-      <button className="op-float-call" onClick={handleSave} style={{ background: saving ? 'rgba(74,127,181,0.5)' : undefined }}>
-        <SaveOutlined style={{ fontSize: 28 }} />
-        <span className="op-float-call-label">{saving ? '保存中' : '保存'}</span>
+      <button className="op-float-call" onClick={() => void handleSave()} style={{ background: saving ? 'rgba(74,127,181,0.5)' : undefined }}>
+        <CheckCircleOutlined style={{ fontSize: 28 }} />
+        <span className="op-float-call-label">{saving ? '提交中' : '提交结果'}</span>
       </button>
+      {agvModal}
     </div>
   );
 }

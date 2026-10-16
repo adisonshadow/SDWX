@@ -14,12 +14,19 @@ import {
 
 export default function StationSelect({
   onSelected,
+  initialType,
 }: {
   onSelected: (code: string, type: WorkstationType, name: string) => void;
+  /** 已选定类型时直接进入该类型的工位列表（如「切换工位」后） */
+  initialType?: WorkstationType;
 }) {
-  const [selectedType, setSelectedType] = useState<WorkstationType | null>(null);
+  const [selectedType, setSelectedType] = useState<WorkstationType | null>(initialType ?? null);
   const [stations, setStations] = useState<Workstation[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    setSelectedType(initialType ?? null);
+  }, [initialType]);
 
   useEffect(() => {
     if (!selectedType) return;

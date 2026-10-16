@@ -17,6 +17,7 @@
     "antd": "^6.4.4",
     "dayjs": "^1.11.13",
     "react": "^19.2.6",
+    "react-barcode": "^1.6.1",
     "react-dom": "^19.2.6",
     "react-router-dom": "^7.18.0"
   },

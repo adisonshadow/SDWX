@@ -1,12 +1,10 @@
 /**
  * CallModal — 异常呼叫弹窗（选项卡片模式，触摸友好）
- *
- * 参考 5702demo：用选项卡片替代 Select，单选高亮。
  */
 import { useState } from 'react';
 import { Modal, Input, App } from 'antd';
 import { createCall } from '../api/opApi';
-import { CALL_TYPES, CALL_TYPE_LABELS, CALLEE_TYPES, CALLEE_TYPE_LABELS, type CallType, type CalleeType } from '@fmms/shared';
+import { CALL_TYPES, CALL_TYPE_LABELS, type CallType } from '@fmms/shared';
 
 const { TextArea } = Input;
 
@@ -21,14 +19,13 @@ export default function CallModal({
 }) {
   const { message } = App.useApp();
   const [callType, setCallType] = useState<CallType>('tool_fault');
-  const [calleeType, setCalleeType] = useState<CalleeType>('engineer');
   const [description, setDescription] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
-      await createCall({ call_type: callType, callee_type: calleeType, description, station_code: stationCode });
+      await createCall({ call_type: callType, description, station_code: stationCode });
       message.success('呼叫已发送');
       setDescription('');
       onClose();
@@ -53,23 +50,6 @@ export default function CallModal({
       width={600}
     >
       <div style={{ marginBottom: 24, marginTop: 30 }}>
-        <label style={{ display: 'block', marginBottom: 12, fontWeight: 500, fontSize: 'var(--op-font-base)' }}>
-          呼叫人员
-        </label>
-        <div className="op-option-grid cols-2">
-          {CALLEE_TYPES.map((t) => (
-            <div
-              key={t}
-              className={`op-option-card ${calleeType === t ? 'selected' : ''}`}
-              onClick={() => setCalleeType(t)}
-            >
-              {CALLEE_TYPE_LABELS[t]}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: 24 }}>
         <label style={{ display: 'block', marginBottom: 12, fontWeight: 500, fontSize: 'var(--op-font-base)' }}>
           呼叫类型
         </label>

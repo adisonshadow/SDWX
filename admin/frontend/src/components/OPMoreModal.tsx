@@ -1,7 +1,7 @@
 /**
  * OPMoreModal — 更多功能弹窗
  *
- * 呼叫、登出、切换工位、设置（字体大小 / 默认全屏）、主副屏全屏
+ * 呼叫、登出、切换工位、设置（字体大小 / 默认全屏）、副屏开关与主副屏全屏
  */
 import { useEffect, useState } from 'react';
 import { Modal, Segmented, Switch, App } from 'antd';
@@ -12,6 +12,7 @@ import {
   ReloadOutlined,
   SettingOutlined,
   SwapOutlined,
+  ToolOutlined,
 } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
 import { clearAuth } from '../auth/auth';
@@ -91,11 +92,26 @@ export default function OPMoreModal({
 
   const switchStation = (key: string) => {
     if (key === '__select__') {
-      updateConfig({ selected_station_type: undefined, selected_station_code: undefined });
+      updateConfig({
+        selected_station_type: undefined,
+        selected_station_code: undefined,
+        selected_station_name: undefined,
+      });
+      ctx.setWorkstationType(undefined);
+      ctx.broadcastSwitchStation(undefined);
     } else {
-      updateConfig({ selected_station_type: key as WorkstationType });
+      const type = key as WorkstationType;
+      // 切换类型时清空具体工位，进入该类型的工位选择
+      updateConfig({
+        selected_station_type: type,
+        selected_station_code: undefined,
+        selected_station_name: undefined,
+      });
+      ctx.setWorkstationType(type);
+      ctx.broadcastSwitchStation(type);
     }
     ctx.setSelectedCardId(undefined);
+    ctx.broadcastDeselectCard();
     message.success('工位已切换');
     handleClose();
   };
@@ -142,6 +158,27 @@ export default function OPMoreModal({
     }
   };
 
+  /** 开关副屏（Electron：IPC 控制；浏览器：弹窗） */
+  const handleSecondaryToggle = async () => {
+    const api = window.electronAPI;
+    try {
+      if (api?.toggleSecondary) {
+        const next = await api.toggleSecondary();
+        setSecondaryOpen(next);
+        return;
+      }
+      // 浏览器：window.open 副屏
+      const popup = window.open(`${window.location.origin}/OPWeb/secondary`, 'fmms-secondary', 'popup=yes');
+      if (!popup) {
+        message.warning('无法打开副屏窗口，请检查浏览器弹窗拦截设置');
+        return;
+      }
+      setSecondaryOpen(true);
+    } catch (e) {
+      message.error(`副屏切换失败: ${(e as Error).message}`);
+    }
+  };
+
   const title =
     view === 'station' ? '切换工位' : view === 'settings' ? '设置' : '更多';
 
@@ -171,7 +208,7 @@ export default function OPMoreModal({
       >
         {view === 'main' && (
           <>
-            <div className="op-more-menu" style={{ marginTop: 30 }}>
+            <div className="op-more-menu op-more-menu-grid" style={{ marginTop: 30 }}>
               <button
                 type="button"
                 className="op-more-item"
@@ -182,6 +219,18 @@ export default function OPMoreModal({
               >
                 <PhoneOutlined />
                 <span>呼叫</span>
+              </button>
+              <button
+                type="button"
+                className="op-more-item"
+                onClick={() => {
+                  handleClose();
+                  ctx.requestRegister?.();
+                }}
+                disabled={!ctx.requestRegister}
+              >
+                <ToolOutlined />
+                <span>设备注册</span>
               </button>
               <button type="button" className="op-more-item" onClick={() => setView('station')}>
                 <SwapOutlined />
@@ -204,17 +253,24 @@ export default function OPMoreModal({
             {isElectron && (
               <div className="op-more-display-controls">
                 <div className="op-more-settings-row">
-                  <span>主屏全屏</span>
-                  <Switch checked={mainFullscreen} onChange={(v) => void handleMainFullscreen(v)} />
+                  <span>副屏</span>
+                  <Switch checked={secondaryOpen} onChange={() => void handleSecondaryToggle()} />
                 </div>
-                <div className="op-more-settings-row">
-                  <span>副屏全屏</span>
-                  <Switch
-                    checked={secondaryFullscreen}
-                    disabled={!secondaryOpen}
-                    onChange={(v) => void handleSecondaryFullscreen(v)}
-                  />
-                </div>
+                {secondaryOpen && (
+                  <>
+                    <div className="op-more-settings-row">
+                      <span>主屏全屏</span>
+                      <Switch checked={mainFullscreen} onChange={(v) => void handleMainFullscreen(v)} />
+                    </div>
+                    <div className="op-more-settings-row">
+                      <span>副屏全屏</span>
+                      <Switch
+                        checked={secondaryFullscreen}
+                        onChange={(v) => void handleSecondaryFullscreen(v)}
+                      />
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </>

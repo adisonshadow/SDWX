@@ -1,0 +1,651 @@
+@font-face {
+  font-family: "iconfont"; /* Project id 5209447 */
+  src: url('iconfont.woff2?t=1784022904902') format('woff2'),
+       url('iconfont.woff?t=1784022904902') format('woff'),
+       url('iconfont.ttf?t=1784022904902') format('truetype');
+}
+
+.iconfont {
+  font-family: "iconfont" !important;
+  font-size: 16px;
+  font-style: normal;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-slotted-pallet:before {
+  content: "\e68a";
+}
+
+.icon-measuring-tool-1:before {
+  content: "\e68b";
+}
+
+.icon-pallet-box-1:before {
+  content: "\e602";
+}
+
+.icon-print-1:before {
+  content: "\e61a";
+}
+
+.icon-print-2:before {
+  content: "\e62c";
+}
+
+.icon-pallet-box-4:before {
+  content: "\e608";
+}
+
+.icon-pallet-1:before {
+  content: "\e60a";
+}
+
+.icon-pallet-box-2:before {
+  content: "\e60e";
+}
+
+.icon-transportation:before {
+  content: "\e68c";
+}
+
+.icon-pallet-box-3:before {
+  content: "\e628";
+}
+
+.icon-pallet-2:before {
+  content: "\e611";
+}
+
+.icon-AGV-pallet-1:before {
+  content: "\e612";
+}
+
+.icon-measuring-tool-2:before {
+  content: "\e8e9";
+}
+
+.icon-AGV-pallet-2:before {
+  content: "\e68d";
+}
+
+.icon-shelf-1:before {
+  content: "\e68e";
+}
+
+.icon-ruler:before {
+  content: "\e613";
+}
+
+.icon-pallet-5:before {
+  content: "\e714";
+}
+
+.icon-tongjidianliang:before {
+  content: "\e67e";
+}
+
+.icon-shanchu:before {
+  content: "\e67f";
+}
+
+.icon-xinjianbianji:before {
+  content: "\e680";
+}
+
+.icon-shezhi:before {
+  content: "\e681";
+}
+
+.icon-kehudangan:before {
+  content: "\e682";
+}
+
+.icon-daishenzhoubao:before {
+  content: "\e683";
+}
+
+.icon-xiaoshoudingdan:before {
+  content: "\e684";
+}
+
+.icon-renlianshibie:before {
+  content: "\e686";
+}
+
+.icon-dayinfuyin:before {
+  content: "\e687";
+}
+
+.icon-kaoqin:before {
+  content: "\e688";
+}
+
+.icon-qunzukehu:before {
+  content: "\e689";
+}
+
+.icon-yuyinhuatong:before {
+  content: "\e631";
+}
+
+.icon-shaixuanshalou:before {
+  content: "\e632";
+}
+
+.icon-tianjiaxinzeng:before {
+  content: "\e634";
+}
+
+.icon-zhanghuanquan:before {
+  content: "\e636";
+}
+
+.icon-wodedianliang:before {
+  content: "\e63a";
+}
+
+.icon-guzhangtongji:before {
+  content: "\e63b";
+}
+
+.icon-erweima:before {
+  content: "\e63c";
+}
+
+.icon-tongzhi:before {
+  content: "\e63d";
+}
+
+.icon-BOMqueshi:before {
+  content: "\e63e";
+}
+
+.icon-wodemoren:before {
+  content: "\e63f";
+}
+
+.icon-fahuoshenqing:before {
+  content: "\e640";
+}
+
+.icon-yinsisuoding:before {
+  content: "\e642";
+}
+
+.icon-zhengzaizhizuo:before {
+  content: "\e643";
+}
+
+.icon-buhegechanpin:before {
+  content: "\e644";
+}
+
+.icon-dingdankaigong:before {
+  content: "\e645";
+}
+
+.icon-fanhuidingbu:before {
+  content: "\e646";
+}
+
+.icon-gongzuotaimoren:before {
+  content: "\e647";
+}
+
+.icon-tuihuoshenqing:before {
+  content: "\e64b";
+}
+
+.icon-tongxunlumoren:before {
+  content: "\e64c";
+}
+
+.icon-zhiliangtongji:before {
+  content: "\e64d";
+}
+
+.icon-wuliaojiegou:before {
+  content: "\e64e";
+}
+
+.icon-xiayiyegengduo:before {
+  content: "\e64f";
+}
+
+.icon-sousuo:before {
+  content: "\e651";
+}
+
+.icon-kucun:before {
+  content: "\e653";
+}
+
+.icon-gongzuotaidianliang:before {
+  content: "\e655";
+}
+
+.icon-tongyong:before {
+  content: "\e658";
+}
+
+.icon-tongxunludianliang:before {
+  content: "\e659";
+}
+
+.icon-gengduotiaojie:before {
+  content: "\e65a";
+}
+
+.icon-xiaoxidianliang:before {
+  content: "\e65b";
+}
+
+.icon-rengongjixiao:before {
+  content: "\e65d";
+}
+
+.icon-saoyisao:before {
+  content: "\e65e";
+}
+
+.icon-xiaoximoren:before {
+  content: "\e65f";
+}
+
+.icon-huanbanhuhuan:before {
+  content: "\e660";
+}
+
+.icon-tijiao:before {
+  content: "\e661";
+}
+
+.icon-daishenribao:before {
+  content: "\e662";
+}
+
+.icon-wuliaodangan:before {
+  content: "\e663";
+}
+
+.icon-jihuajindu:before {
+  content: "\e664";
+}
+
+.icon-jindumulu:before {
+  content: "\e665";
+}
+
+.icon-dingdanwancheng:before {
+  content: "\e666";
+}
+
+.icon-caigoupaihang:before {
+  content: "\e667";
+}
+
+.icon-caigoushenqing:before {
+  content: "\e669";
+}
+
+.icon-hezuoqiatan:before {
+  content: "\e66b";
+}
+
+.icon-jianyanjilu:before {
+  content: "\e66c";
+}
+
+.icon-shengchandingdan:before {
+  content: "\e66d";
+}
+
+.icon-tanhuamianshi:before {
+  content: "\e66f";
+}
+
+.icon-gongzuohuibao:before {
+  content: "\e672";
+}
+
+.icon-qiyezhenduan:before {
+  content: "\e674";
+}
+
+.icon-xinzidaiyu:before {
+  content: "\e675";
+}
+
+.icon-xinzengchanpin:before {
+  content: "\e676";
+}
+
+.icon-caigoudingdan:before {
+  content: "\e678";
+}
+
+.icon-ceshi:before {
+  content: "\e679";
+}
+
+.icon-tongjimoren:before {
+  content: "\e67a";
+}
+
+.icon-waiqin:before {
+  content: "\e67b";
+}
+
+.icon-xiaoshoupaihang:before {
+  content: "\e67d";
+}
+
+.icon-process-text:before {
+  content: "\e60f";
+}
+
+.icon-BOM-list:before {
+  content: "\e64a";
+}
+
+.icon-process-flow-1:before {
+  content: "\e638";
+}
+
+.icon-process-1:before {
+  content: "\e6cb";
+}
+
+.icon-process-2:before {
+  content: "\e6ef";
+}
+
+.icon-process-flow-2:before {
+  content: "\e763";
+}
+
+.icon-aggregation:before {
+  content: "\e78b";
+}
+
+.icon-data-analysis:before {
+  content: "\e66a";
+}
+
+.icon-desgin-1:before {
+  content: "\e744";
+}
+
+.icon-repair-record:before {
+  content: "\e616";
+}
+
+.icon-plan-1:before {
+  content: "\e69d";
+}
+
+.icon-dashboard-1:before {
+  content: "\e639";
+}
+
+.icon-process-3:before {
+  content: "\e617";
+}
+
+.icon-model-1:before {
+  content: "\e671";
+}
+
+.icon-process-video-1:before {
+  content: "\e656";
+}
+
+.icon-hub-1:before {
+  content: "\e70a";
+}
+
+.icon-process-design-1:before {
+  content: "\e76a";
+}
+
+.icon-BOM-1:before {
+  content: "\e622";
+}
+
+.icon-workstation-1:before {
+  content: "\e712";
+}
+
+.icon-maintenance-1:before {
+  content: "\e623";
+}
+
+.icon-record-1:before {
+  content: "\e690";
+}
+
+.icon-process-route:before {
+  content: "\e745";
+}
+
+.icon-process-4:before {
+  content: "\e746";
+}
+
+.icon-workstation-2:before {
+  content: "\e673";
+}
+
+.icon-files-1:before {
+  content: "\e62a";
+}
+
+.icon-kanban:before {
+  content: "\e62d";
+}
+
+.icon-BOM-3:before {
+  content: "\e6d2";
+}
+
+.icon-logistics:before {
+  content: "\e657";
+}
+
+.icon-process-card-1:before {
+  content: "\e630";
+}
+
+.icon-config-1:before {
+  content: "\e821";
+}
+
+.icon-flag-2:before {
+  content: "\e835";
+}
+
+.icon-circulation:before {
+  content: "\e60c";
+}
+
+.icon-workstation-3:before {
+  content: "\e614";
+}
+
+.icon-process-5:before {
+  content: "\e67c";
+}
+
+.icon-kanban-2:before {
+  content: "\e627";
+}
+
+.icon-producer-1:before {
+  content: "\e60b";
+}
+
+.icon-back-1:before {
+  content: "\e6af";
+}
+
+.icon-devices-4:before {
+  content: "\e7e4";
+}
+
+.icon-process-design-2:before {
+  content: "\e7dc";
+}
+
+.icon-production-line-2:before {
+  content: "\e86a";
+}
+
+.icon-data-analysis-2:before {
+  content: "\e65c";
+}
+
+.icon-data-analysis-3:before {
+  content: "\e605";
+}
+
+.icon-deny:before {
+  content: "\e62b";
+}
+
+.icon-flag-3:before {
+  content: "\e633";
+}
+
+.icon-alert-1:before {
+  content: "\e649";
+}
+
+.icon-shougongluru:before {
+  content: "\e6b1";
+}
+
+.icon-card-1:before {
+  content: "\e600";
+}
+
+.icon-lineside-store:before {
+  content: "\e601";
+}
+
+.icon-workflow-2:before {
+  content: "\e6c3";
+}
+
+.icon-user-1:before {
+  content: "\e707";
+}
+
+.icon-card-2:before {
+  content: "\e637";
+}
+
+.icon-shengchan:before {
+  content: "\e635";
+}
+
+.icon-maintenance-2:before {
+  content: "\e606";
+}
+
+.icon-next-2:before {
+  content: "\e62e";
+}
+
+.icon-call-1:before {
+  content: "\e650";
+}
+
+.icon-back-2:before {
+  content: "\e654";
+}
+
+.icon-workstation-4:before {
+  content: "\e79e";
+}
+
+.icon-AGV-IGV-1:before {
+  content: "\e652";
+}
+
+.icon-server:before {
+  content: "\e603";
+}
+
+.icon-warehousing:before {
+  content: "\e604";
+}
+
+.icon-config-2:before {
+  content: "\e607";
+}
+
+.icon-zichan:before {
+  content: "\e66e";
+}
+
+.icon-devices-1:before {
+  content: "\e610";
+}
+
+.icon-notice:before {
+  content: "\e7ef";
+}
+
+.icon-production-line-1:before {
+  content: "\e6d5";
+}
+
+.icon-sheji:before {
+  content: "\e60d";
+}
+
+.icon-workflow-1:before {
+  content: "\e742";
+}
+
+.icon-flag-1:before {
+  content: "\e641";
+}
+
+.icon-devices-2:before {
+  content: "\e685";
+}
+
+.icon-AGV-scheduling:before {
+  content: "\e6a0";
+}
+
+.icon-BOM-4:before {
+  content: "\e677";
+}
+
+.icon-next:before {
+  content: "\e670";
+}
+
+.icon-qualified:before {
+  content: "\e648";
+}
+
+.icon-production-logistics:before {
+  content: "\e609";
+}
+
+.icon-AGV-IGV-2:before {
+  content: "\e6c4";
+}
+
+.icon-landing-gear:before {
+  content: "\e874";
+}
+
+.icon-kanban-4:before {
+  content: "\e668";
+}
+

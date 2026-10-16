@@ -16,11 +16,13 @@ import type {
   TrayTemplate,
   TraySlot,
   WbsNode,
+  WorkStep,
+  Bop,
+  AgvTask,
   WorkstationType,
   PartStatus,
   DisposalResult,
   CallType,
-  CalleeType,
   InspectionResultData,
 } from '@fmms/shared';
 
@@ -43,9 +45,10 @@ export const fetchWorkCards = (params: { stationType?: string; status?: string; 
 };
 
 export interface WorkCardDetail {
-  work_card: WorkCard;
+  work_card: WorkCard & { inspection_result?: InspectionResultData };
   parts: WorkCardPart[];
   wbs_node: WbsNode | null;
+  work_steps?: WorkStep[];
 }
 
 export const fetchWorkCardDetail = (id: string) => get<WorkCardDetail>(`${BASE}/workcards/${id}`);
@@ -67,10 +70,15 @@ export const fetchWorkCardParts = (cardId: string) => get<Paged<WorkCardPart>>(`
 export const updatePart = (partId: string, body: { status?: PartStatus; disposal_result?: DisposalResult }) =>
   patch(`${BASE}/parts/${partId}`, body);
 
-// ---- 检测项 ----
-export const fetchInspectionItems = (params: { wbsNodeId?: string; partCode?: string }) => {
+// ---- 检测项（按工卡/工步/零件，不按 WBS）----
+export const fetchInspectionItems = (params: {
+  workCardId?: string;
+  workStepId?: string;
+  partCode?: string;
+}) => {
   const q = new URLSearchParams();
-  if (params.wbsNodeId) q.set('wbs_node_id', params.wbsNodeId);
+  if (params.workCardId) q.set('work_card_id', params.workCardId);
+  if (params.workStepId) q.set('work_step_id', params.workStepId);
   if (params.partCode) q.set('part_code', params.partCode);
   return get<Paged<InspectionItem>>(`${BASE}/inspection-items?${q}`);
 };
@@ -85,22 +93,52 @@ export const registerTool = (body: Partial<MeasuringTool> & { tool_code: string;
 // ---- 异常呼叫 ----
 export const createCall = (body: {
   call_type: CallType;
-  callee_type?: CalleeType;
   description?: string;
   station_code?: string;
 }) => post<NotificationLog>(`${BASE}/call`, body);
 
 // ---- 修理（委外/报废）----
-export const createOutsource = (body: { source_card_id?: string; outsource_party: string; part_codes?: string[] }) =>
-  post<OutsourceOrder>(`${BASE}/outsource`, body);
+export const createOutsource = (body: {
+  source_card_id?: string;
+  outsource_party?: string;
+  outsource_company?: string;
+  part_codes?: string[];
+  part_code?: string;
+  part_name?: string;
+  quantity?: number;
+}) => post<OutsourceOrder>(`${BASE}/outsource`, body);
 
 export const fetchOutsource = (cardId?: string) =>
   get<Paged<OutsourceOrder>>(`${BASE}/outsource${cardId ? `?card_id=${cardId}` : ''}`);
 
 export const createScrap = (body: {
   card_id?: string;
-  items: Array<{ part_code?: string; part_name?: string; quantity: number; scrap_type?: string; reason?: string }>;
+  work_card_id?: string;
+  items: Array<{
+    part_code?: string;
+    part_name?: string;
+    part_id?: string;
+    quantity: number;
+    scrap_type?: string;
+    scrap_category?: string;
+    reason?: string;
+    scrap_reason?: string;
+  }>;
 }) => post(`${BASE}/scrap`, body);
+
+/** 修理记录（EADAF Bop） */
+export const createRepairRecord = (body: {
+  method: string;
+  equipment?: string;
+  process?: string;
+  conclusion?: string;
+  defect_description?: string;
+  work_card_id?: string;
+  part_id?: string;
+}) => post<Bop>(`${BASE}/disposal/repair`, body);
+
+export const fetchWorkSteps = (wbsNodeId?: string) =>
+  get<Paged<WorkStep>>(`${BASE}/work-steps${wbsNodeId ? `?wbs_node_id=${wbsNodeId}` : ''}`);
 
 // ---- 收发（线边库/出入库）----
 export const fetchInventory = () => get<Paged<LineStock>>(`${BASE}/inventory`);
@@ -108,11 +146,11 @@ export const fetchInventory = () => get<Paged<LineStock>>(`${BASE}/inventory`);
 export const createInventoryTransaction = (body: {
   stock_id?: string;
   transaction_type: 'inbound' | 'outbound';
-  stock_type?: string;
-  material_code: string;
+  part_code?: string;
+  part_name?: string;
+  material_code?: string;
   material_name?: string;
   quantity: number;
-  unit: string;
   related_barcode?: string;
   card_id?: string;
 }) => post(`${BASE}/inventory/transaction`, body);
@@ -123,8 +161,8 @@ export const fetchTrayTemplates = () => get<Paged<TrayTemplate>>(`${BASE}/tray-t
 export const fetchTrayTemplateDetail = (id: string) =>
   get<{ template: TrayTemplate; slots: TraySlot[] }>(`${BASE}/tray-templates/${id}`);
 
-export const updateTraySlot = (slotId: string, filled: boolean) =>
-  patch(`${BASE}/tray-slots/${slotId}`, { filled });
+export const updateTraySlot = (slotId: string, body: { required?: boolean; slotStatus?: string; filled?: boolean }) =>
+  patch(`${BASE}/tray-slots/${slotId}`, body);
 
 // ---- 存储 ----
 export const uploadFile = (filename: string, file: File) => upload(`${BASE}/storage/upload`, filename, file);
@@ -137,6 +175,19 @@ export const fetchSsoConfig = () =>
 
 export const fetchMe = () => get<unknown>('/auth/me');
 
-// ---- AGV（Mock）----
-export const requestAgv = (body: { card_id?: string; action: 'in' | 'out' }) =>
-  post(`${BASE}/agv`, body);
+// ---- AGV 转运 ----
+export const requestAgv = (body: {
+  action: 'in' | 'out';
+  from_station: string;
+  to_station?: string;
+  card_id?: string;
+  carrier_info?: string;
+}) => post<AgvTask>(`${BASE}/agv`, body);
+
+export const fetchAgvTasks = (params?: { from_station?: string; status?: string }) => {
+  const q = new URLSearchParams();
+  if (params?.from_station) q.set('from_station', params.from_station);
+  if (params?.status) q.set('status', params.status);
+  const qs = q.toString();
+  return get<Paged<AgvTask>>(`${BASE}/agv${qs ? `?${qs}` : ''}`);
+};

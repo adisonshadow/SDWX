@@ -13,12 +13,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { useLocation } from 'react-router-dom';
 import OPHeader, { type OPHeaderButton } from '../components/OPHeader';
 import OPMoreModal from '../components/OPMoreModal';
-import SecondaryScreenToggle from '../components/SecondaryScreenToggle';
 import { useLocalConfig } from '../hooks/useLocalConfig';
-import { isSecondaryScreen } from './opScreenMode';
 import type { OpFontScale } from '@fmms/shared';
 
 export interface OPHeaderConfig {
@@ -28,6 +25,8 @@ export interface OPHeaderConfig {
   rightSlot?: ReactNode;
   /** 当前页刷新回调；未注册时「更多」内刷新将 reload 页面 */
   onRefresh?: () => void;
+  /** 为 true 时标题靠左对齐，默认 false（居中） */
+  isPutTitleLeft?: boolean;
 }
 
 interface OPHeaderContextValue {
@@ -35,6 +34,13 @@ interface OPHeaderContextValue {
 }
 
 const Ctx = createContext<OPHeaderContextValue | null>(null);
+
+/**
+ * 当为 true 时，useOPHeader 调用变为空操作（不注册 header）。
+ * 用于把次屏看板作为子组件嵌入主屏时，避免看板的 useOPHeader 覆盖宿主页的 header。
+ */
+const HeaderSuppressedCtx = createContext(false);
+export const HeaderSuppressedProvider = HeaderSuppressedCtx.Provider;
 
 export function OPHeaderProvider({
   children,
@@ -46,8 +52,6 @@ export function OPHeaderProvider({
   const [config, setConfigState] = useState<OPHeaderConfig | null>(null);
   const [moreOpen, setMoreOpen] = useState(false);
   const { config: localConfig } = useLocalConfig();
-  const location = useLocation();
-  const isMainScreen = !isSecondaryScreen(location.pathname, location.search);
 
   const setHeader = useCallback((next: OPHeaderConfig | null) => {
     setConfigState(next);
@@ -68,7 +72,7 @@ export function OPHeaderProvider({
             onBack={config.onBack}
             rightButtons={config.rightButtons}
             rightSlot={config.rightSlot}
-            trailingSlot={isMainScreen ? <SecondaryScreenToggle /> : undefined}
+            isPutTitleLeft={config.isPutTitleLeft}
             onMore={() => setMoreOpen(true)}
           />
         )}
@@ -84,15 +88,17 @@ export function OPHeaderProvider({
   );
 }
 
-/** 页面内注册 header；卸载时自动清除 */
+/** 页面内注册 header；卸载时自动清除。被 HeaderSuppressedProvider 包裹时空操作。 */
 export function useOPHeader(config: OPHeaderConfig) {
   const ctx = useContext(Ctx);
+  const suppressed = useContext(HeaderSuppressedCtx);
   if (!ctx) throw new Error('useOPHeader 必须在 OPHeaderProvider 内使用');
 
-  const { title, onBack, rightButtons, rightSlot, onRefresh } = config;
+  const { title, onBack, rightButtons, rightSlot, onRefresh, isPutTitleLeft = false } = config;
 
   useEffect(() => {
-    ctx.setHeader({ title, onBack, rightButtons, rightSlot, onRefresh });
+    if (suppressed) return;
+    ctx.setHeader({ title, onBack, rightButtons, rightSlot, onRefresh, isPutTitleLeft });
     return () => ctx.setHeader(null);
-  }, [ctx, title, onBack, rightButtons, rightSlot, onRefresh]);
+  }, [ctx, suppressed, title, onBack, rightButtons, rightSlot, onRefresh, isPutTitleLeft]);
 }
