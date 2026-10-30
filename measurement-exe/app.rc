@@ -1,0 +1,5 @@
+#include "resource.h"
+
+IDI_APP ICON "app.ico"
+IDR_HEADER_SETTINGS RCDATA "header-settings.png"
+IDR_HEADER_HIDE RCDATA "header-hide.png"

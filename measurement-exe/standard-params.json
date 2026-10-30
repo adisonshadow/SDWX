@@ -1,0 +1,65 @@
+{
+  "version": "2026-10-10",
+  "contextFields": [
+    { "key": "bizObject", "label": "测量对象" },
+    { "key": "bizRef", "label": "业务引用" },
+    { "key": "part", "label": "零件" },
+    { "key": "workCard", "label": "工卡" },
+    { "key": "location", "label": "部位" }
+  ],
+  "requirementFields": [
+    { "key": "nominal", "label": "公称值" },
+    { "key": "upper", "label": "上偏差", "signed": true },
+    { "key": "lower", "label": "下偏差", "signed": true },
+    { "key": "note", "label": "工艺说明" }
+  ],
+  "devices": [
+    {
+      "deviceType": "endoscope",
+      "name": "内窥镜",
+      "params": [
+        { "code": "observation", "name": "观测结论", "valueType": "string", "unit": null, "description": "对可见表面的总体结论，如腐蚀、裂纹、剥落、无异常" },
+        { "code": "defect_location", "name": "缺陷位置", "valueType": "string", "unit": null, "description": "缺陷所在位置，如轴向距离、周向或时钟方位" },
+        { "code": "snapshot", "name": "内窥图像", "valueType": "image", "unit": null, "description": "确认后的截图。一张或多张都放在 value 数组里" }
+      ]
+    },
+    {
+      "deviceType": "handheld_cmm",
+      "name": "手持式三坐标测量仪",
+      "params": [
+        { "code": "inner_diameter", "name": "内径", "valueType": "number", "unit": "mm", "description": "被测孔或筒体内径" },
+        { "code": "roundness", "name": "圆度", "valueType": "number", "unit": "mm", "description": "同一截面轮廓相对理想圆的偏差" },
+        { "code": "cylindricity", "name": "圆柱度", "valueType": "number", "unit": "mm", "description": "沿轴向各截面合成的圆柱偏差" },
+        { "code": "guide_wear", "name": "导向段磨损量", "valueType": "number", "unit": "mm", "description": "导向段相对原始尺寸的磨损量" },
+        { "code": "coaxiality", "name": "同轴度", "valueType": "number", "unit": "mm", "description": "被测轴线相对基准轴线的同轴偏差" }
+      ]
+    },
+    {
+      "deviceType": "digital_micrometer",
+      "name": "数字测量千分尺",
+      "params": [
+        { "code": "outer_diameter", "name": "外径", "valueType": "number", "unit": "mm", "description": "外圆直径" },
+        { "code": "length", "name": "长度", "valueType": "number", "unit": "mm", "description": "轴向长度" },
+        { "code": "thickness", "name": "厚度", "valueType": "number", "unit": "mm", "description": "壁厚、片厚或层厚" }
+      ]
+    },
+    {
+      "deviceType": "camera",
+      "name": "拍照相机",
+      "params": [
+        { "code": "overview", "name": "全貌照片", "valueType": "image", "unit": null, "description": "零件整体外观。可多张" },
+        { "code": "detail", "name": "局部照片", "valueType": "image", "unit": null, "description": "缺陷或测量部位特写。可多张" },
+        { "code": "remark", "name": "拍摄说明", "valueType": "string", "unit": null, "description": "拍摄部位、光线或现场备注" }
+      ]
+    },
+    {
+      "deviceType": "deflection_gauge",
+      "name": "挠度工装测量仪",
+      "params": [
+        { "code": "span", "name": "测量跨距", "valueType": "number", "unit": "mm", "description": "两支点之间的距离" },
+        { "code": "deflection", "name": "挠度", "valueType": "number", "unit": "mm", "description": "加载后测得的挠度" },
+        { "code": "residual_deflection", "name": "残余挠度", "valueType": "number", "unit": "mm", "description": "卸载后残留的变形" }
+      ]
+    }
+  ]
+}
