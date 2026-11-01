@@ -3,6 +3,7 @@ import { lazy, Suspense } from 'react';
 import { Spin } from 'antd';
 import LoginPage from './auth/LoginPage';
 import AuthCallback from './auth/AuthCallback';
+import NotifyAppLogin from './auth/NotifyAppLogin';
 import AuthGate from './auth/AuthGate';
 import AppLayout from './layouts/AppLayout';
 
@@ -57,6 +58,7 @@ export function AppRoutes() {
       {/* 公开路由 */}
       <Route path="/auth/login" element={<LoginPage />} />
       <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/auth/notify-app" element={<NotifyAppLogin />} />
 
       {/* 受保护业务路由（统一 AppLayout） */}
       <Route

@@ -2,7 +2,7 @@
  * LoginPage — SSO 登录入口
  * 点击跳转到 EADAF 登录页
  */
-import { useLocation } from 'react-router-dom';
+import { useLocation, useSearchParams } from 'react-router-dom';
 import { Button, Card, Typography, Space } from 'antd';
 import { buildSsoLoginUrl, saveAuthReturnPath } from './auth';
 
@@ -10,9 +10,11 @@ const { Title } = Typography;
 
 export default function LoginPage() {
   const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const returnTo =
+    (location.state as { from?: string } | null)?.from || searchParams.get('from') || '';
 
   const handleLogin = () => {
-    const returnTo = (location.state as { from?: string } | null)?.from;
     if (returnTo) saveAuthReturnPath(returnTo);
     window.location.href = buildSsoLoginUrl();
   };

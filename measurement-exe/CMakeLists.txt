@@ -17,6 +17,7 @@ add_executable(measurement-adapter WIN32
   src/tasks.cpp
   src/http_server.cpp
   src/panel.cpp
+  src/device_probe.cpp
   app.manifest
   app.rc
 )
@@ -38,7 +39,7 @@ else()
   target_link_options(measurement-adapter PRIVATE -static -static-libgcc -static-libstdc++)
 endif()
 
-target_link_libraries(measurement-adapter PRIVATE ws2_32 winhttp comctl32 shell32 user32 gdi32 gdiplus msimg32 ole32 advapi32)
+target_link_libraries(measurement-adapter PRIVATE ws2_32 winhttp comctl32 shell32 user32 gdi32 gdiplus msimg32 ole32 advapi32 setupapi cfgmgr32)
 
 add_custom_command(TARGET measurement-adapter POST_BUILD
   COMMAND ${CMAKE_COMMAND} -E copy_if_different

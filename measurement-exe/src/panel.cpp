@@ -1,3 +1,4 @@
+#include "device_probe.h"
 #include "panel.h"
 
 #include "resource.h"
@@ -39,6 +40,7 @@ constexpr int IDC_SET_LOCATE = 1107;
 constexpr int IDC_SET_SAVE = 1108;
 constexpr int IDC_SET_CLOSE = 1109;
 constexpr int IDC_SET_STATUS = 1110;
+constexpr int IDC_SET_DEVICE = 1111;
 constexpr wchar_t kAppVersion[] = L"1.0.0";
 constexpr wchar_t kHeaderTitle[] = L"SD厂N车间数字化测量采集";
 constexpr wchar_t kRunKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
@@ -996,6 +998,10 @@ int layoutSettings(HWND hwnd) {
   y += checkH + dp(4);
   addChild(hwnd, L"BUTTON", L"开机自启动", 0, BS_AUTOCHECKBOX | WS_TABSTOP, IDC_SET_STARTUP, margin, y, contentW, checkH);
   y += checkH + gap;
+  addChild(hwnd, L"STATIC", L"设备", 0, SS_LEFT, 0, margin, y, contentW, labelH);
+  y += labelH + dp(2);
+  addChild(hwnd, L"BUTTON", L"设备检测", 0, BS_PUSHBUTTON | WS_TABSTOP, IDC_SET_DEVICE, margin, y, dp(140), dp(30));
+  y += dp(30) + gap;
   addChild(hwnd, L"STATIC", L"日志文件地址", 0, SS_LEFT, 0, margin, y, contentW, labelH);
   y += labelH + dp(2);
   addChild(hwnd, L"EDIT", L"", WS_EX_CLIENTEDGE, ES_AUTOHSCROLL | WS_TABSTOP, IDC_SET_LOG, margin, y, contentW, editH);
@@ -1076,6 +1082,7 @@ LRESULT CALLBACK settingsProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     case WM_COMMAND:
       if (LOWORD(wParam) == IDC_SET_SAVE) saveSettingsFrom(hwnd);
       else if (LOWORD(wParam) == IDC_SET_LOCATE) locateLogFrom(hwnd);
+      else if (LOWORD(wParam) == IDC_SET_DEVICE) openDeviceProbe(hwnd);
       else if (LOWORD(wParam) == IDC_SET_CLOSE) DestroyWindow(hwnd);
       return 0;
     case WM_CLOSE:
