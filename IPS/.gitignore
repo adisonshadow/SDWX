@@ -6,6 +6,5 @@ dist/
 backend/dist/
 frontend/dist/
 packages/*/dist/
-backend/.env.development
 backend/.env.production
 backend/.env

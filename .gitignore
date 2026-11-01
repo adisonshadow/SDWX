@@ -16,13 +16,12 @@ pnpm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# env（敏感文件不提交）
-# backend 的 .env.development/.env.production 含 app_secret/SSO salt，必须忽略
-# frontend/workstation-client 的 env 仅含公开地址，可提交
+# env
+# web/backend/.env.development 随仓库提交，供本机开发直接使用
+# 生产环境和其余密钥文件仍不提交
 .env
 .env.local
 web/backend/.env
-web/backend/.env.development
 web/backend/.env.production
 web/frontend/.env.development
 web/frontend/.env.production
