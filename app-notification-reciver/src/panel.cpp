@@ -34,13 +34,15 @@ constexpr int IDC_SET_FLASH = 1105;
 constexpr int IDC_SET_SAVE = 1106;
 constexpr int IDC_SET_CLOSE = 1107;
 constexpr int IDC_SET_STATUS = 1108;
+constexpr int IDC_SET_LOGOUT = 1109;
+constexpr int IDC_SET_LABEL = 1110;
 constexpr int IDC_ACCEPT_BY = 1201;
 constexpr int IDC_SET_HINT = 1112;
 constexpr wchar_t kAppVersion[] = L"1.0.0";
 constexpr wchar_t kRunKey[] = L"Software\\Microsoft\\Windows\\CurrentVersion\\Run";
 constexpr wchar_t kRunValueName[] = L"app-notification-reciver";
 
-enum class HitAction { Hide, Settings, CloseCard, Expand, Accept, Complete, Cancel };
+enum class HitAction { Hide, Settings, CloseCard, Expand, Accept, Complete, Cancel, Login };
 
 struct Hit {
   RECT rc{};
@@ -90,6 +92,9 @@ std::vector<std::string> g_popupIds;
 std::vector<CardDraw> g_cards;
 std::vector<Hit> g_hits;
 std::wstring g_banner;
+std::wstring g_loginPrompt;
+RECT g_loginTextRc{};
+bool g_showLogin = false;
 std::string g_displayName;
 std::string g_expandedId;
 std::string g_busyId;
@@ -113,6 +118,8 @@ RECT g_track{};
 int g_flashStep = -1;
 
 void openSettings();
+void launchLogin(HWND statusOwner);
+void refreshAccountRow(HWND hwnd, bool force);
 
 int dp(int value) { return MulDiv(value, g_dpi <= 0 ? 96 : g_dpi, 96); }
 
@@ -342,11 +349,26 @@ void layoutPanel() {
   SystemParametersInfoW(SPI_GETWORKAREA, 0, &work, 0);
   int workH = std::max(dp(200), static_cast<int>(work.bottom - work.top));
   g_titleH = dp(40);
-  g_bannerH = g_banner.empty() ? 0 : dp(40);
+  bool loggedOut = !g_service || g_service->config().token.empty();
+  bool sessionEnded = g_banner.find(L"登录已过期") != std::wstring::npos || g_banner.find(L"请先在设置里登录") != std::wstring::npos;
+  g_showLogin = g_cards.empty() && (loggedOut || sessionEnded);
+  g_loginPrompt = L"未登录";
+  if (g_showLogin && !g_banner.empty() && g_banner != L"请先在设置里登录") g_loginPrompt = g_banner;
+  if (g_showLogin || g_banner.empty()) g_bannerH = 0;
+  else g_bannerH = std::max(dp(40), textHeight(g_banner, width - dp(24)) + dp(12));
   int maxWindow = workH * 70 / 100;
   int maxBody = std::max(dp(72), maxWindow - g_titleH - g_bannerH);
-  g_viewHeight = g_cards.empty() ? dp(72) : std::min(g_bodyHeight, maxBody);
   g_viewTop = g_titleH + g_bannerH;
+  if (!g_cards.empty()) {
+    g_viewHeight = std::min(g_bodyHeight, maxBody);
+  } else if (g_showLogin) {
+    int promptH = std::max(dp(22), textHeight(g_loginPrompt, width - dp(32)));
+    int textY = g_viewTop + dp(14);
+    g_loginTextRc = RECT{dp(16), textY, width - dp(16), textY + promptH};
+    g_viewHeight = (g_loginTextRc.bottom - g_viewTop) + dp(10) + dp(32) + dp(16);
+  } else {
+    g_viewHeight = dp(72);
+  }
   clampScroll();
   int height = g_viewTop + g_viewHeight;
   int x = work.right - width - dp(12);
@@ -379,6 +401,15 @@ void layoutPanel() {
   hide.rc = RECT{hideX, gear.rc.top, hideX + icon, gear.rc.bottom};
   hide.action = HitAction::Hide;
   g_hits.push_back(hide);
+  if (g_showLogin) {
+    Hit login;
+    int top = g_loginTextRc.bottom + dp(10);
+    login.rc = RECT{dp(16), top, dp(16) + dp(120), top + dp(32)};
+    login.action = HitAction::Login;
+    login.label = L"登录";
+    login.fill = RGB(36, 99, 168);
+    g_hits.push_back(login);
+  }
   updateThumb();
   positionEdit();
   InvalidateRect(g_hwnd, nullptr, FALSE);
@@ -463,14 +494,7 @@ void applySnapshot(PollSnapshot snap) {
     if (snap.flash) startFlash();
   }
   updateTip();
-  if (g_settings) {
-    HWND status = GetDlgItem(g_settings, IDC_SET_STATUS);
-    if (status) {
-      std::wstring text = g_banner;
-      if (text.empty()) text = g_displayName.empty() ? L"已登录" : L"已登录：" + utf8ToWide(g_displayName);
-      SetWindowTextW(status, text.c_str());
-    }
-  }
+  if (g_settings) refreshAccountRow(g_settings, false);
 }
 
 void publish(PollSnapshot snap) {
@@ -571,8 +595,12 @@ void paint(HDC target) {
 
   IntersectClipRect(mem, 0, g_viewTop, width, g_viewTop + g_viewHeight);
   if (g_cards.empty()) {
-    RECT empty{dp(16), g_viewTop, width - dp(16), g_viewTop + g_viewHeight};
-    drawLabel(mem, empty, g_banner.empty() ? L"暂无待处理呼叫" : g_banner, RGB(90, 98, 110), false, false, true);
+    if (g_showLogin) {
+      drawLabel(mem, g_loginTextRc, g_loginPrompt, RGB(90, 98, 110), false, false, true);
+    } else if (g_banner.empty()) {
+      RECT empty{dp(16), g_viewTop, width - dp(16), g_viewTop + g_viewHeight};
+      drawLabel(mem, empty, L"暂无待处理呼叫", RGB(90, 98, 110), false, false, true);
+    }
   }
   for (const auto& card : g_cards) {
     RECT box{dp(12), card.top, dp(400) - dp(12) - dp(10), card.top + card.height};
@@ -674,6 +702,7 @@ void fire(const Hit& hit) {
   else if (hit.action == HitAction::Accept) submitCard(hit.id, CallAction::Accept);
   else if (hit.action == HitAction::Complete) submitCard(hit.id, CallAction::Complete);
   else if (hit.action == HitAction::Cancel) submitCard(hit.id, CallAction::Cancel);
+  else if (hit.action == HitAction::Login) launchLogin(nullptr);
 }
 
 std::wstring trimWide(std::wstring text) {
@@ -731,15 +760,147 @@ bool saveSettingsFrom(HWND hwnd, bool requireUrl) {
   return true;
 }
 
-void openLogin(HWND hwnd) {
-  if (!saveSettingsFrom(hwnd, true)) return;
+void launchLogin(HWND statusOwner) {
+  if (!g_service) return;
+  if (statusOwner && !saveSettingsFrom(statusOwner, true)) return;
   AppConfig config = g_service->config();
   std::string root = trimAscii(config.apiBase);
   while (!root.empty() && (root.back() == '/' || root.back() == '\\')) root.pop_back();
-  std::wstring url = utf8ToWide(root) + L"/auth/notify-app";
-  HINSTANCE launched = ShellExecuteW(hwnd, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-  if (reinterpret_cast<INT_PTR>(launched) <= 32) setStatus(hwnd, L"无法打开浏览器");
-  else setStatus(hwnd, L"已打开浏览器，登录后点「打开通知APP」");
+  std::wstring status;
+  if (root.empty() || !looksLikeUrl(root)) {
+    status = L"请先在设置里填写接口地址";
+  } else {
+    std::wstring url = utf8ToWide(root) + L"/auth/notify-app";
+    // SSO 回调落在 localhost。127.0.0.1 是另一个站点，登录后回不到这个页面。
+    const std::wstring loopback = L"://127.0.0.1";
+    const auto loopbackAt = url.find(loopback);
+    if (loopbackAt != std::wstring::npos) url.replace(loopbackAt, loopback.size(), L"://localhost");
+    HINSTANCE launched = ShellExecuteW(statusOwner ? statusOwner : g_hwnd, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    status = reinterpret_cast<INT_PTR>(launched) <= 32 ? L"无法打开浏览器" : L"已打开浏览器，登录后点「打开通知APP」";
+  }
+  if (statusOwner) setStatus(statusOwner, status);
+  else if (status != L"已打开浏览器，登录后点「打开通知APP」") {
+    g_banner = status;
+    layoutPanel();
+    updateTip();
+  }
+}
+
+void logoutAccount(HWND hwnd) {
+  if (!g_service) return;
+  AppConfig config = g_service->config();
+  config.token.clear();
+  config.refreshToken.clear();
+  config.displayName.clear();
+  g_service->updateConfig(config);
+  g_displayName.clear();
+  g_banner = L"未登录";
+  g_open.clear();
+  g_popupIds.clear();
+  g_expandedId.clear();
+  layoutPanel();
+  updateTip();
+  if (hwnd) refreshAccountRow(hwnd, true);
+}
+
+std::wstring accountLabel(const AppConfig& config) {
+  if (config.token.empty()) return L"未登录";
+  if (config.displayName.empty()) return L"已登录";
+  return L"已登录：" + utf8ToWide(config.displayName);
+}
+
+void moveControl(HWND parent, int id, int x, int y, int w, int h, bool show) {
+  HWND child = GetDlgItem(parent, id);
+  if (!child) return;
+  SetWindowPos(child, nullptr, x, y, std::max(1, w), std::max(1, h), SWP_NOZORDER | SWP_NOACTIVATE);
+  ShowWindow(child, show ? SW_SHOW : SW_HIDE);
+}
+
+int textWidth(const std::wstring& text) {
+  HDC dc = GetDC(g_hwnd ? g_hwnd : g_settings);
+  HGDIOBJ old = SelectObject(dc, g_font ? g_font : GetStockObject(DEFAULT_GUI_FONT));
+  SIZE size{};
+  GetTextExtentPoint32W(dc, text.c_str(), static_cast<int>(text.size()), &size);
+  SelectObject(dc, old);
+  ReleaseDC(g_hwnd ? g_hwnd : g_settings, dc);
+  return size.cx;
+}
+
+void resizeSettings(HWND hwnd, int clientNeed) {
+  RECT window{};
+  RECT client{};
+  GetWindowRect(hwnd, &window);
+  GetClientRect(hwnd, &client);
+  int chromeH = (window.bottom - window.top) - (client.bottom - client.top);
+  int chromeW = (window.right - window.left) - (client.right - client.left);
+  int width = (client.right - client.left) + chromeW;
+  int height = clientNeed + chromeH;
+  SetWindowPos(hwnd, nullptr, 0, 0, width, height, SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+}
+
+int placeSettings(HWND hwnd) {
+  RECT client{};
+  GetClientRect(hwnd, &client);
+  int width = std::max(dp(320), static_cast<int>(client.right - client.left));
+  int margin = dp(16);
+  int contentW = std::max(dp(200), width - margin * 2);
+  int y = margin;
+  int labelH = dp(22);
+  int editH = dp(28);
+  int checkH = dp(28);
+  int gap = dp(8);
+  bool loggedIn = g_service && !g_service->config().token.empty();
+  std::wstring account = g_service ? accountLabel(g_service->config()) : L"未登录";
+  moveControl(hwnd, IDC_SET_LABEL, margin, y, contentW, labelH, true);
+  y += labelH + dp(2);
+  moveControl(hwnd, IDC_SET_URL, margin, y, contentW, editH, true);
+  y += editH + gap;
+  moveControl(hwnd, IDC_SET_HINT, margin, y, contentW, dp(52), true);
+  y += dp(52) + gap;
+  if (!loggedIn) {
+    moveControl(hwnd, IDC_SET_LOGIN, margin, y, dp(120), dp(32), true);
+    y += dp(32) + gap;
+  } else {
+    moveControl(hwnd, IDC_SET_LOGIN, 0, 0, dp(120), dp(32), false);
+  }
+  moveControl(hwnd, IDC_SET_STARTUP, margin, y, contentW, checkH, true);
+  y += checkH;
+  moveControl(hwnd, IDC_SET_SOUND, margin, y, contentW, checkH, true);
+  y += checkH;
+  moveControl(hwnd, IDC_SET_FLASH, margin, y, contentW, checkH, true);
+  y += checkH + gap;
+  int rowH = dp(32);
+  SetWindowTextW(GetDlgItem(hwnd, IDC_SET_STATUS), account.c_str());
+  if (loggedIn) {
+    int buttonW = dp(108);
+    int textW = std::min(std::max(dp(48), textWidth(account) + dp(6)), std::max(dp(48), contentW - buttonW - gap));
+    moveControl(hwnd, IDC_SET_STATUS, margin, y, textW, rowH, true);
+    moveControl(hwnd, IDC_SET_LOGOUT, margin + textW + gap, y + dp(2), buttonW, dp(28), true);
+  } else {
+    moveControl(hwnd, IDC_SET_STATUS, margin, y, contentW, rowH, true);
+    moveControl(hwnd, IDC_SET_LOGOUT, 0, 0, dp(108), dp(28), false);
+  }
+  y += rowH + gap;
+  int half = (contentW - gap) / 2;
+  moveControl(hwnd, IDC_SET_SAVE, margin, y, half, dp(32), true);
+  moveControl(hwnd, IDC_SET_CLOSE, margin + half + gap, y, contentW - half - gap, dp(32), true);
+  return y + dp(32) + margin;
+}
+
+bool g_rowReady = false;
+bool g_rowLoggedIn = false;
+std::string g_rowName;
+
+void refreshAccountRow(HWND hwnd, bool force) {
+  if (!hwnd || !IsWindow(hwnd)) return;
+  bool loggedIn = g_service && !g_service->config().token.empty();
+  std::string name = g_service ? g_service->config().displayName : "";
+  if (!force && g_rowReady && loggedIn == g_rowLoggedIn && name == g_rowName) return;
+  g_rowReady = true;
+  g_rowLoggedIn = loggedIn;
+  g_rowName = name;
+  int need = placeSettings(hwnd);
+  resizeSettings(hwnd, need);
 }
 
 void fillSettings(HWND hwnd) {
@@ -749,9 +910,7 @@ void fillSettings(HWND hwnd) {
   SendMessageW(GetDlgItem(hwnd, IDC_SET_STARTUP), BM_SETCHECK, startupEnabled() ? BST_CHECKED : BST_UNCHECKED, 0);
   SendMessageW(GetDlgItem(hwnd, IDC_SET_SOUND), BM_SETCHECK, config.playSound ? BST_CHECKED : BST_UNCHECKED, 0);
   SendMessageW(GetDlgItem(hwnd, IDC_SET_FLASH), BM_SETCHECK, config.flashOnNotify ? BST_CHECKED : BST_UNCHECKED, 0);
-  if (config.token.empty()) setStatus(hwnd, L"未登录");
-  else if (config.displayName.empty()) setStatus(hwnd, L"已登录");
-  else setStatus(hwnd, L"已登录：" + utf8ToWide(config.displayName));
+  refreshAccountRow(hwnd, true);
 }
 
 int layoutSettings(HWND hwnd) {
@@ -765,7 +924,7 @@ int layoutSettings(HWND hwnd) {
   int editH = dp(28);
   int checkH = dp(28);
   int gap = dp(8);
-  addChild(hwnd, L"STATIC", L"接口地址", 0, SS_LEFT, 0, margin, y, contentW, labelH);
+  addChild(hwnd, L"STATIC", L"接口地址", 0, SS_LEFT, IDC_SET_LABEL, margin, y, contentW, labelH);
   y += labelH + dp(2);
   addChild(hwnd, L"EDIT", L"", WS_EX_CLIENTEDGE, ES_AUTOHSCROLL | WS_TABSTOP, IDC_SET_URL, margin, y, contentW, editH);
   y += editH + gap;
@@ -780,8 +939,9 @@ int layoutSettings(HWND hwnd) {
   y += checkH;
   addChild(hwnd, L"BUTTON", L"新通知出现时闪动 3 下", 0, BS_AUTOCHECKBOX | WS_TABSTOP, IDC_SET_FLASH, margin, y, contentW, checkH);
   y += checkH + gap;
-  addChild(hwnd, L"STATIC", L"", 0, SS_LEFT, IDC_SET_STATUS, margin, y, contentW, dp(36));
-  y += dp(36) + gap;
+  addChild(hwnd, L"STATIC", L"", 0, SS_LEFT | SS_CENTERIMAGE, IDC_SET_STATUS, margin, y, contentW, dp(32));
+  addChild(hwnd, L"BUTTON", L"退出登录", 0, BS_PUSHBUTTON | WS_TABSTOP, IDC_SET_LOGOUT, margin, y, dp(108), dp(28));
+  y += dp(32) + gap;
   int half = (contentW - gap) / 2;
   addChild(hwnd, L"BUTTON", L"保存", 0, BS_PUSHBUTTON | WS_TABSTOP, IDC_SET_SAVE, margin, y, half, dp(32));
   addChild(hwnd, L"BUTTON", L"关闭", 0, BS_PUSHBUTTON | WS_TABSTOP, IDC_SET_CLOSE, margin + half + gap, y, contentW - half - gap, dp(32));
@@ -810,7 +970,8 @@ LRESULT CALLBACK settingsProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
     }
     case WM_COMMAND:
       if (LOWORD(wParam) == IDC_SET_SAVE) saveSettingsFrom(hwnd, false);
-      else if (LOWORD(wParam) == IDC_SET_LOGIN) openLogin(hwnd);
+      else if (LOWORD(wParam) == IDC_SET_LOGIN) launchLogin(hwnd);
+      else if (LOWORD(wParam) == IDC_SET_LOGOUT) logoutAccount(hwnd);
       else if (LOWORD(wParam) == IDC_SET_CLOSE) DestroyWindow(hwnd);
       return 0;
     case WM_CLOSE:
@@ -864,16 +1025,15 @@ void openSettings() {
 void applyLoginUrl(const std::wstring& url) {
   std::string text = wideToUtf8(url);
   std::string token = queryParam(text, "token");
+  std::string refresh = queryParam(text, "refresh");
   std::string name = queryParam(text, "name");
   if (token.empty() || !g_service) return;
-  g_service->setToken(token, name);
+  g_service->setToken(token, name, refresh);
   if (!name.empty()) g_displayName = name;
   g_banner.clear();
   updateTip();
-  if (g_settings) {
-    if (name.empty()) setStatus(g_settings, L"已登录");
-    else setStatus(g_settings, L"已登录：" + utf8ToWide(name));
-  }
+  layoutPanel();
+  if (g_settings) refreshAccountRow(g_settings, true);
 }
 
 void showTrayMenu() {

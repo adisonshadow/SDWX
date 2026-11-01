@@ -8,6 +8,7 @@
 struct AppConfig {
   std::string apiBase = "http://127.0.0.1:6082";
   std::string token;
+  std::string refreshToken;
   std::string displayName;
   bool playSound = true;
   bool flashOnNotify = true;
@@ -57,7 +58,8 @@ class ReceiverService {
   explicit ReceiverService(std::string configPath);
   AppConfig config() const;
   void updateConfig(const AppConfig& config);
-  void setToken(const std::string& token, const std::string& displayName);
+  void setToken(const std::string& token, const std::string& displayName, const std::string& refreshToken = "");
+  bool renewAccess(AppConfig& config);
   void setWake(std::function<void()> wake);
   void enqueue(CallJob job);
   PollSnapshot poll();

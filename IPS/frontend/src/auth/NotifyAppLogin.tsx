@@ -2,8 +2,10 @@
  * 通知程序登录成功页。
  * 浏览器里完成 SSO 后，点「打开通知APP」把令牌交给本机托盘程序。
  */
+import { useEffect, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Button, Card, Space, Typography } from 'antd';
-import { buildSsoLoginUrl, clearAuth, getToken, getUserInfo, saveAuthReturnPath } from './auth';
+import { buildSsoLoginUrl, canonicalFrontendOrigin, clearAuth, getRefreshToken, getToken, getUserInfo, saveAuth, saveAuthReturnPath } from './auth';
 
 const { Title, Paragraph, Text } = Typography;
 
@@ -15,6 +17,17 @@ function accountLabel(): string {
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return '';
+}
+
+function accessExpired(token: string): boolean {
+  const part = token.split('.')[1];
+  if (!part) return false;
+  try {
+    const json = JSON.parse(atob(part.replace(/-/g, '+').replace(/_/g, '/'))) as { exp?: number };
+    return typeof json.exp === 'number' && json.exp * 1000 < Date.now() + 30_000;
+  } catch {
+    return false;
+  }
 }
 
 const pageStyle = {
@@ -33,15 +46,48 @@ const pageStyle = {
 export default function NotifyAppLogin() {
   const token = getToken();
   const name = accountLabel();
+  const [searchParams] = useSearchParams();
+  const starting = useRef(false);
 
-  const startLogin = () => {
+  const startLogin = async () => {
+    if (starting.current) return;
+    starting.current = true;
+    const canonical = await canonicalFrontendOrigin();
+    if (canonical && canonical !== window.location.origin) {
+      window.location.replace(`${canonical}/auth/notify-app?start=1`);
+      return;
+    }
     saveAuthReturnPath('/auth/notify-app');
     window.location.href = buildSsoLoginUrl();
   };
 
-  const openApp = () => {
-    if (!token) return;
-    const url = `notify-receiver://login?token=${encodeURIComponent(token)}&name=${encodeURIComponent(name)}`;
+  useEffect(() => {
+    if (searchParams.get('start') !== '1' || getToken()) return;
+    void startLogin();
+  }, [searchParams]);
+
+  const openApp = async () => {
+    let nextToken = token || '';
+    let refresh = getRefreshToken() || '';
+    if (!nextToken) return;
+    if (refresh && accessExpired(nextToken)) {
+      try {
+        const resp = await fetch('/api/ips/session/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refreshToken: refresh }),
+        });
+        const json = (await resp.json()) as { data?: { token?: string; refreshToken?: string } };
+        if (resp.ok && json.data?.token) {
+          nextToken = json.data.token;
+          refresh = json.data.refreshToken || refresh;
+          saveAuth(nextToken, refresh, getUserInfo());
+        }
+      } catch {
+        // 交给托盘程序再试一次
+      }
+    }
+    const url = `notify-receiver://login?token=${encodeURIComponent(nextToken)}&refresh=${encodeURIComponent(refresh)}&name=${encodeURIComponent(name)}`;
     window.location.href = url;
   };
 

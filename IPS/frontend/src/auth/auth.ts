@@ -75,6 +75,20 @@ export async function checkAuth(): Promise<boolean> {
   }
 }
 
+/** SSO 完成后浏览器会回到的前端站点。和当前页不同源时，sessionStorage 里的回跳地址带不回去。 */
+export async function canonicalFrontendOrigin(): Promise<string | null> {
+  try {
+    const res = await fetch('/auth/sso-config');
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: { frontend_url?: string } };
+    const url = json.data?.frontend_url?.trim();
+    if (!url) return null;
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
+}
+
 /** 构造 EADAF SSO 登录 URL */
 export function buildSsoLoginUrl(applicationId?: string): string {
   const appId = applicationId || import.meta.env.VITE_SSO_APPLICATION_ID;

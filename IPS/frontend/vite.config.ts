@@ -11,6 +11,8 @@ export default defineConfig({
     ],
   },
   server: {
+    // 同时监听 127.0.0.1。只绑 ::1 时，托盘程序默认的 http://127.0.0.1:6082 连不上。
+    host: true,
     port: 6082,
     proxy: {
       // 仅代理 BFF 鉴权接口；/auth/login、/auth/callback 是前端 SPA 路由，不可代理

@@ -7,6 +7,28 @@ import { config } from '../config/env.js';
 import { ok, fail, handleError } from '../lib/response.js';
 
 export const callConfigRouter = Router();
+
+/** 用刷新令牌换新的访问令牌。访问令牌过期后仍可调用。 */
+callConfigRouter.post('/session/refresh', async (req, res) => {
+  try {
+    const body = (req.body ?? {}) as { refreshToken?: unknown; refresh_token?: unknown };
+    const refreshToken = textOf(body.refreshToken) || textOf(body.refresh_token);
+    if (!refreshToken) return fail(res, 400, '缺少刷新令牌');
+    const resp = await fetch(`${config.eadaf.apiBaseUrl}/api/v1/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken, app: config.eadaf.applicationId }),
+    });
+    const json = await resp.json() as { code?: number; message?: string; data?: { token?: string; refresh_token?: string } };
+    if (!resp.ok || (json.code && json.code >= 400) || !json.data?.token) {
+      return fail(res, resp.status === 200 ? 401 : resp.status || 401, json.message || '登录已过期，请在设置里重新登录');
+    }
+    ok(res, { token: json.data.token, refreshToken: json.data.refresh_token || refreshToken });
+  } catch (e) {
+    handleError(res, e);
+  }
+});
+
 callConfigRouter.use(authenticate);
 
 callConfigRouter.get('/call-roles', async (req, res) => {
@@ -35,7 +57,7 @@ function textOf(value: unknown): string {
 }
 
 function roleKey(key: string): boolean {
-  return ['roles', 'roleIds', 'role_ids', 'roleId', 'role_id', 'userRoles', 'user_roles'].includes(key);
+  return ['roles', 'roleIds', 'role_ids', 'roleId', 'role_id', 'userRoles', 'user_roles', 'effective_roles', 'effectiveRoles'].includes(key);
 }
 
 /** 从登录用户或 EADAF 返回里收集角色 id。 */
@@ -78,23 +100,27 @@ callConfigRouter.get('/my-roles', async (req, res) => {
     if (auth) {
       const paths = ['/api/v1/auth/me', userId ? `/api/v1/users/${userId}` : '', userId ? `/api/v1/users/${userId}/roles` : '']
         .filter((path) => path);
+      let expired = false;
       for (const path of paths) {
         try {
           const resp = await fetch(`${config.eadaf.apiBaseUrl}${path}`, { headers: { Authorization: auth } });
           const text = await resp.text();
+          if (resp.status === 401) {
+            expired = true;
+            continue;
+          }
           if (!resp.ok || !text) continue;
           const json = JSON.parse(text) as unknown;
-          const before = roleIds.size;
           collectRoleIds(json, roleIds);
           if (!name && json && typeof json === 'object') {
             const data = (json as { data?: Record<string, unknown> }).data ?? (json as Record<string, unknown>);
             if (data && typeof data === 'object') name = displayNameOf(data as Record<string, unknown>) || name;
           }
-          if (roleIds.size > before && roleIds.size > 0) break;
         } catch {
           // 下一个地址
         }
       }
+      if (roleIds.size === 0 && expired) return fail(res, 401, '登录已过期，请在设置里重新登录');
     }
     ok(res, { roleIds: Array.from(roleIds), name });
   } catch (e) {

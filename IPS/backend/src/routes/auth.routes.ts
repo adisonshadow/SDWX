@@ -24,6 +24,7 @@ authRouter.get('/sso-config', (_req, res) => {
       application_id: config.eadaf.applicationId,
       callback_url: config.sso.callbackUrl,
       redirect_mode: config.sso.redirectMode,
+      frontend_url: config.bff.frontendUrl,
     },
   });
 });

@@ -6,6 +6,7 @@
 #include "json.hpp"
 
 #include <algorithm>
+#include <ctime>
 
 namespace {
 
@@ -151,6 +152,46 @@ std::string workstationLabel(const json& row) {
   return fieldText(row, {"id"});
 }
 
+int base64Value(char ch) {
+  if (ch >= 'A' && ch <= 'Z') return ch - 'A';
+  if (ch >= 'a' && ch <= 'z') return ch - 'a' + 26;
+  if (ch >= '0' && ch <= '9') return ch - '0' + 52;
+  if (ch == '+' || ch == '-') return 62;
+  if (ch == '/' || ch == '_') return 63;
+  return -1;
+}
+
+std::string decodeBase64Url(std::string text) {
+  std::string out;
+  int value = 0;
+  int bits = 0;
+  for (char ch : text) {
+    if (ch == '=') break;
+    int digit = base64Value(ch);
+    if (digit < 0) continue;
+    value = (value << 6) | digit;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      out.push_back(static_cast<char>((value >> bits) & 0xFF));
+    }
+  }
+  return out;
+}
+
+bool accessExpired(const std::string& token) {
+  auto first = token.find('.');
+  auto second = first == std::string::npos ? std::string::npos : token.find('.', first + 1);
+  if (first == std::string::npos || second == std::string::npos) return false;
+  try {
+    json payload = json::parse(decodeBase64Url(token.substr(first + 1, second - first - 1)));
+    if (!payload.is_object() || !payload.contains("exp") || !payload["exp"].is_number()) return false;
+    return payload["exp"].get<long long>() <= static_cast<long long>(std::time(nullptr)) + 30;
+  } catch (...) {
+    return false;
+  }
+}
+
 int soundRank(const std::string& key) {
   if (key == "alarm") return 3;
   if (key == "chime") return 2;
@@ -168,6 +209,7 @@ AppConfig loadConfig(const std::string& path) {
     if (!root.is_object()) return config;
     if (root.contains("apiBase") && root["apiBase"].is_string()) config.apiBase = trimAscii(root["apiBase"].get<std::string>());
     if (root.contains("token") && root["token"].is_string()) config.token = root["token"].get<std::string>();
+    if (root.contains("refreshToken") && root["refreshToken"].is_string()) config.refreshToken = root["refreshToken"].get<std::string>();
     if (root.contains("displayName") && root["displayName"].is_string()) config.displayName = root["displayName"].get<std::string>();
     if (root.contains("playSound") && root["playSound"].is_boolean()) config.playSound = root["playSound"].get<bool>();
     if (root.contains("flashOnNotify") && root["flashOnNotify"].is_boolean()) config.flashOnNotify = root["flashOnNotify"].get<bool>();
@@ -181,6 +223,7 @@ AppConfig loadConfig(const std::string& path) {
 bool saveConfig(const std::string& path, const AppConfig& config) {
   json root = {{"apiBase", config.apiBase},
                {"token", config.token},
+               {"refreshToken", config.refreshToken},
                {"displayName", config.displayName},
                {"playSound", config.playSound},
                {"flashOnNotify", config.flashOnNotify},
@@ -214,12 +257,13 @@ void ReceiverService::updateConfig(const AppConfig& config) {
   if (wake) wake();
 }
 
-void ReceiverService::setToken(const std::string& token, const std::string& displayName) {
+void ReceiverService::setToken(const std::string& token, const std::string& displayName, const std::string& refreshToken) {
   std::function<void()> wake;
   {
     std::lock_guard<std::mutex> lock(mu_);
     config_.token = token;
     if (!displayName.empty()) config_.displayName = displayName;
+    if (!refreshToken.empty()) config_.refreshToken = refreshToken;
     seen_.clear();
     primed_ = false;
     announceNext_ = true;
@@ -227,6 +271,34 @@ void ReceiverService::setToken(const std::string& token, const std::string& disp
     wake = wake_;
   }
   if (wake) wake();
+}
+
+bool ReceiverService::renewAccess(AppConfig& config) {
+  if (config.refreshToken.empty()) return false;
+  std::string root = apiRoot(config.apiBase);
+  json request = {{"refreshToken", config.refreshToken}};
+  HttpResponse response = httpRequest("POST", root + "/api/ips/session/refresh", "", request.dump());
+  json body;
+  std::string error;
+  if (!parseBody(response, body, error)) return false;
+  const json* data = &body;
+  json wrapped;
+  if (body.is_object() && body.contains("data") && body["data"].is_object()) {
+    wrapped = body["data"];
+    data = &wrapped;
+  }
+  std::string token = fieldText(*data, {"token", "access_token", "accessToken"});
+  std::string refresh = fieldText(*data, {"refreshToken", "refresh_token"});
+  if (token.empty()) return false;
+  {
+    std::lock_guard<std::mutex> lock(mu_);
+    config_.token = token;
+    if (!refresh.empty()) config_.refreshToken = refresh;
+    saveConfig(path_, config_);
+    config.token = config_.token;
+    config.refreshToken = config_.refreshToken;
+  }
+  return true;
 }
 
 void ReceiverService::setWake(std::function<void()> wake) {
@@ -275,6 +347,10 @@ PollSnapshot ReceiverService::poll() {
     snap.error = "请先在设置里登录";
     return finish(snap);
   }
+  if (accessExpired(config.token) && !renewAccess(config)) {
+    snap.error = "登录已过期，请在设置里重新登录";
+    return finish(snap);
+  }
 
   auto runJob = [&](const CallJob& job) {
     json body = json::object();
@@ -310,6 +386,9 @@ PollSnapshot ReceiverService::poll() {
   json rolesRoot;
   std::string rolesError;
   HttpResponse rolesResponse = httpRequest("GET", root + "/api/ips/my-roles", config.token, "");
+  if (rolesResponse.status == 401 && renewAccess(config)) {
+    rolesResponse = httpRequest("GET", root + "/api/ips/my-roles", config.token, "");
+  }
   std::vector<std::string> roleIds;
   std::string learnedName;
   if (!parseBody(rolesResponse, rolesRoot, rolesError)) {
