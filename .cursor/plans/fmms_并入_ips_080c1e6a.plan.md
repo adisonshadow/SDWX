@@ -51,7 +51,7 @@ flowchart LR
 
 在 EADAF 上改 `IPS:*` 实体，不改 `fmms:*`。物化后发布对应 Find/Create/Update。把这些服务加入 FMMS 应用的可访问数据范围，否则工位应用令牌会 401。
 
-IPS 仓库 [packages/shared/src/types.ts](/Volumes/dev/SDQLJ_IPS/packages/shared/src/types.ts) 和 [routes.ts](/Volumes/dev/SDQLJ_IPS/packages/shared/src/routes.ts) 同步新字段和新实体。排产页面只在自己用到的字段上改，不把工位界面做进 IPS。
+IPS 仓库 [packages/shared/src/types.ts](/Volumes/dev/SDQLJ_GJXL/IPS/packages/shared/src/types.ts) 和 [routes.ts](/Volumes/dev/SDQLJ_GJXL/IPS/packages/shared/src/routes.ts) 同步新字段和新实体。排产页面只在自己用到的字段上改，不把工位界面做进 IPS。
 
 ## 2. 工位端改为调用 IPS
 

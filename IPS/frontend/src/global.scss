@@ -1,0 +1,17 @@
+/* 全局主操作按钮渐变样式 [PAGE_LAYOUT_STANDARD §1.2] */
+.btn-gradient-primary {
+  background: linear-gradient(135deg, rgb(98, 83, 235), rgb(4, 204, 254)) !important;
+  border: none;
+  color: #fff !important;
+  &:hover:not(:disabled) {
+    background: linear-gradient(135deg, rgb(108, 89, 235), #36c8ff) !important;
+    box-shadow: 0 4px 12px rgba(98, 83, 225, 0.35);
+  }
+  &:active:not(:disabled) {
+    background: linear-gradient(135deg, rgb(93, 56, 203), rgb(3, 125, 213)) !important;
+  }
+}
+
+body {
+  margin: 0 !important;
+}

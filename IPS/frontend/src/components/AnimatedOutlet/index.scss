@@ -1,0 +1,10 @@
+.ips-page-transition {
+  min-height: 100%;
+  will-change: opacity, transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ips-page-transition {
+    will-change: opacity;
+  }
+}

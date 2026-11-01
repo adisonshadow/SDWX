@@ -1,0 +1,17 @@
+{
+  "name": "sdqlj-ips",
+  "version": "0.1.0",
+  "private": true,
+  "description": "修理车间智能排产系统 (IPS) — repair workshop intelligent production-scheduling system",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@10.23.0",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "pnpm -r --parallel --stream run dev",
+    "build": "pnpm -r run build",
+    "typecheck": "pnpm -r run typecheck",
+    "seed": "pnpm --filter @ips/backend run seed"
+  }
+}

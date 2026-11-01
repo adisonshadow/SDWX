@@ -1,0 +1,43 @@
+.engine-monitor__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.engine-monitor__grid {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 16px;
+
+  @media (max-width: 960px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.engine-monitor__log-list {
+  max-height: 420px;
+  overflow: auto;
+}
+
+.engine-monitor__log-item {
+  display: flex !important;
+  gap: 12px;
+  align-items: flex-start !important;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+
+  &.level-error .ant-typography {
+    color: #ff4d4f;
+  }
+
+  &.level-success .ant-typography {
+    color: #389e0d;
+  }
+}
+
+.engine-monitor__log-ts {
+  flex-shrink: 0;
+  min-width: 72px;
+}

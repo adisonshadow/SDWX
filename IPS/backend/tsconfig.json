@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "declaration": false,
+    "sourceMap": true,
+    "noEmit": false,
+    "lib": ["ES2022"],
+    "paths": {
+      "@ips/shared": ["../packages/shared/src"],
+      "@ips/shared/*": ["../packages/shared/src/*"]
+    }
+  },
+  "include": ["src"]
+}

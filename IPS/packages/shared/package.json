@@ -1,0 +1,22 @@
+{
+  "name": "@ips/shared",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IPS 共享类型与常量（供 backend BFF、frontend 共用）",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./types": "./src/types.ts",
+    "./enums": "./src/enums.ts",
+    "./routes": "./src/routes.ts",
+    "./ws-events": "./src/ws-events.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}

@@ -43,7 +43,7 @@
 
 不再把 IPS 工卡复制到 `fmms/production/WorkCard`。`POST /api/hooks/ips-workcard` 和 `IPS_HOOK_TOKEN` 已去掉。派工就是 IPS 工卡变为可执行，工位直接改这张工卡。
 
-IPS 仓库的类型和路径在 `/Volumes/dev/SDQLJ_IPS/packages/shared/src/types.ts`、`routes.ts`。
+IPS 仓库的类型和路径在 `/Volumes/dev/SDQLJ_GJXL/IPS/packages/shared/src/types.ts`、`routes.ts`。
 
 ---
 

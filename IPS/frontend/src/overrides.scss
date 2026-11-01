@@ -1,0 +1,25 @@
+/* ProTable 查询区「查询」按钮：浅灰底，与工具栏「新建」渐变区分 [PAGE_LAYOUT_STANDARD §1.4] */
+.ant-pro-query-filter-container .ant-btn-primary {
+  background-color: #d9dfeb !important;
+  color: var(--ant-button-default-color);
+
+  &:hover {
+    background-color: #dfe8f9 !important;
+    color: #2a4e96 !important;
+  }
+}
+
+/* 菜单选中色与主色统一 */
+.ant-menu-item.ant-menu-item-selected,
+.ant-menu-light.ant-menu-horizontal > .ant-menu-item-selected {
+  color: #0476e7 !important;
+}
+
+/* 隐藏 PageHeader 面包屑 */
+.ant-page-header .ant-breadcrumb {
+  display: none !important;
+}
+
+.ant-pro-page-container-children-container {
+  padding-block-start: 10px;
+}

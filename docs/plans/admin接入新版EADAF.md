@@ -4,7 +4,7 @@
 >
 > 本文替代原来的"已做修改"清单：补上待办与验收，并把 2026-10-31 确认的决策、实测到的问题一并写进来。
 > 核对基准：代码 + 运行中的 EADAF（`localhost:29526`）。所有写探测的测试数据已删除，改过的行已还原。
-> 目录：`/Volumes/dev/EADAF`（平台）、`/Volumes/dev/SDQLJ_IPS`（排产/生产管理）、`/Volumes/dev/SDQLJ_GJXL`（本项目，工位作业）。
+> 目录：`/Volumes/dev/EADAF`（平台）、`/Volumes/dev/SDQLJ_GJXL/IPS`（排产/生产管理）、`/Volumes/dev/SDQLJ_GJXL`（本项目，工位作业）。
 
 ## 0. 结论
 
@@ -18,7 +18,7 @@
 | 系统 | 位置 | 职责 |
 |---|---|---|
 | EADAF | `/Volumes/dev/EADAF`，API `29526` / 管理台 `29527` | 唯一数据模型来源：实体、字段、物化表、采集管道、SSO |
-| IPS | `/Volumes/dev/SDQLJ_IPS`，EADAF 应用 `IPS`（`…0005`） | 生产线管理：排产、创建工卡/派工 |
+| IPS | `/Volumes/dev/SDQLJ_GJXL/IPS`，EADAF 应用 `IPS`（`…0005`） | 生产线管理：排产、创建工卡/派工 |
 | 本项目 FMMS | `/Volumes/dev/SDQLJ_GJXL`，EADAF 应用 `FMMS`（`…0006`） | 工位侧：接收工卡、作业、检测、处置、收发 |
 
 已确认的 4 条决策：

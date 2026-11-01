@@ -1,0 +1,35 @@
+{
+  "name": "@ips/backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "IPS backend — stateless BFF (no database), data lives in EADAF",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "NODE_ENV=production tsx src/server.ts",
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx src/scripts/seed.ts",
+    "seed:inspection": "tsx src/scripts/seed-inspection.ts"
+  },
+  "dependencies": {
+    "@ips/shared": "workspace:*",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.0",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.5.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/multer": "^2.3.0",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}
