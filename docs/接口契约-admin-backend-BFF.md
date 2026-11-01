@@ -1,6 +1,6 @@
-# admin/backend BFF 接口契约
+# web/backend BFF 接口契约
 
-> admin/backend 是无数据库的 BFF（Backend-for-Frontend），所有数据存取经 EADAF。本文档定义 BFF 对前端（admin/frontend /OPWeb）与工位客户端（app-workstation-client）暴露的 REST + WebSocket 接口。
+> web/backend 是无数据库的 BFF。业务数据写 IPS，不写 `fmms` 工卡。页面向 BFF 仍提交原来的字段名；BFF 再换成 IPS 的 camelCase。本文定义 BFF 对工位页（`http://localhost:5181/OPWeb`）和工位客户端暴露的接口。文件名里的 admin 是旧目录名。
 
 ---
 
@@ -47,13 +47,13 @@ GET /auth/sso-config
 **响应 data：**
 ```json
 {
-  "eadaf_frontend_url": "http://localhost:9527",
+  "eadaf_frontend_url": "http://localhost:29527",
   "application_id": "10000000-0001-4000-8000-000000000006",
-  "callback_url": "http://localhost:5180/auth/callback",
-  "redirect_mode": "POST_REDIRECT"
+  "callback_url": "http://localhost:5181/auth/callback",
+  "login_url": "http://localhost:5180/auth/login"
 }
 ```
-> 前端据此构造 SSO 登录跳转 URL：`{eadaf_frontend_url}/auth/login?app={application_id}`
+> 前端向 `login_url` 发起跳转，由 BFF 完成授权码登录。浏览器不拼 EADAF 的 `?app=` 地址。
 
 ### 2.2 SSO 回调（POST 跳转模式）
 ```
@@ -226,7 +226,7 @@ Body: CollectFrame {
   "ts": "2026-07-10T08:30:00.000Z"
 }
 ```
-**处理：** BFF 注入应用 token → `POST /api/v1/ingest/fmms/measurementIngest`（EADAF 采集管道）。≤1MB 分批。BFF 同时解析（如 parse_template 可用）并 WS 回显 `collect.frame` 事件。
+**现行采集入口是另一条：** 测量适配程序 `POST /api/collect/measurement`（不认证，靠 `COLLECT_ALLOWED_IPS`）。BFF 用应用令牌转发到 `POST /api/v1/ingest/IPS/digital_measure`，并按 `results[].code` 写入 IPS 检验记录。下面的 `/api/op/ingest` 不是这条回调。
 **响应 data：**
 ```json
 { "processed": 1, "measured_value": 25.03, "result": "qualified" }

@@ -21,11 +21,11 @@ yarn-error.log*
 # frontend/workstation-client 的 env 仅含公开地址，可提交
 .env
 .env.local
-admin/backend/.env
-admin/backend/.env.development
-admin/backend/.env.production
-admin/frontend/.env.development
-admin/frontend/.env.production
+web/backend/.env
+web/backend/.env.development
+web/backend/.env.production
+web/frontend/.env.development
+web/frontend/.env.production
 .env.*.local
 !.env.example
 

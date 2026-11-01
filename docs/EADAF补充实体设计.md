@@ -1,8 +1,10 @@
 # EADAF 补充实体设计 — FMMS
 
-> **用途**：EADAF 当前已有 6 个实体（WorkCard / Workstation / WbsNode / InspectionItem / MeasuringTool / LineStock）。以下补充实体供你在 EADAF 中创建。
+> **2026-11-01：这些补充实体已经建在 IPS 上，字段是 camelCase。不要再按下面的 `fmms/`、snake_case 去创建。** 现行路径见 `docs/EADAF数据结构设计-FMMS.md` 第 1 节。
 >
-> **命名规则**：域前缀 `fmms/`，字段 snake_case，与已有 6 实体风格一致。每个实体自动生成 4 个 routePath：`fmms/{Entity}{Create|Find|Update|Delete}`。
+> 对照：`WorkCardPart` → `IPS/production/WorkCardPart`；`OutsourceOrder` → `IPS/production/WorkCardOutsourcing`；`ScrapRecord` → `IPS/production/ScrapRecord`；`InventoryTransaction` / `TrayTemplate` / `TraySlot` → `IPS/logistics/...`；`NotificationLog` → `IPS/service/NotificationLog`。
+>
+> 下文是当时的字段草案，只作对照。
 
 ---
 

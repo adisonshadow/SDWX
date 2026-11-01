@@ -1,6 +1,6 @@
 packages:
-  - admin/backend
-  - admin/frontend
+  - web/backend
+  - web/frontend
   - app-workstation-client
   - app-dashboard
   - app-notification-reciver

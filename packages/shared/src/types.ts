@@ -288,12 +288,26 @@ export interface NotificationLog {
   caller_id?: string;
   caller_name?: string;
   is_responded: boolean;
+  /** sent | accepted | completed | cancelled */
+  status?: string;
+  accepted_by?: string;
+  accepted_at?: string;
+  completed_at?: string;
   respond_time?: string;
   responder_id?: string;
   responder_name?: string;
   remark?: string;
   created_at?: string;
   updated_at?: string;
+}
+
+/** 示意图热区，相对图片宽高 0–1。shape 为 circle 时工位画成圆 */
+export interface TrayHotZone {
+  shape?: 'rect' | 'square' | 'circle';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 /** 形迹托盘模版 */
@@ -304,6 +318,9 @@ export interface TrayTemplate {
   workstation_type?: string;
   description?: string;
   trayPhotoObjectId?: string;
+  status?: string;
+  bop_scheme_id?: string;
+  material_class_id?: string;
   created_at?: string;
   updated_at?: string;
 }
@@ -320,6 +337,10 @@ export interface TraySlot {
   width?: number;
   height?: number;
   part_code?: string;
+  material_id?: string;
+  material_name?: string;
+  instance_no?: number;
+  hot_zone?: TrayHotZone;
   required: boolean;
   slotStatus?: string;
   sort_order: number;

@@ -1,0 +1,7 @@
+{
+  "name": "@fmms/web-dev",
+  "private": true,
+  "scripts": {
+    "dev": "pnpm --dir .. --filter @fmms/web-bff --filter @fmms/web --parallel --stream dev"
+  }
+}

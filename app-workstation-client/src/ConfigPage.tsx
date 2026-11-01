@@ -1,7 +1,7 @@
 /**
  * ConfigPage — 内置配置页
  *
- * 配置 admin/frontend (OPWeb) 地址、EADAF 前端地址、SSO 应用 ID、双屏模式。
+ * 配置 web/frontend (OPWeb) 地址、EADAF 前端地址、SSO 应用 ID、双屏模式。
  * 保存后主进程重启到 OPWeb。支持测试连接。
  */
 import { useEffect, useState } from 'react';
@@ -80,7 +80,7 @@ export default function ConfigPage() {
               name="op_base_url"
               label="服务器地址 (OPWeb)"
               rules={[{ required: true, message: '请填写服务器地址' }]}
-              extra="admin/frontend 地址，如 http://localhost:5181"
+              extra="web/frontend 地址，如 http://localhost:5181"
             >
               <Input placeholder="http://localhost:5181" />
             </Form.Item>

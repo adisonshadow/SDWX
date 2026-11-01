@@ -99,39 +99,46 @@ export const STOCK_TYPE_LABELS: Record<StockType, string> = {
 };
 
 /**
- * EADAF 子 Scope（对齐 apis.json 中 fmms/{scope}/ 路径段）
+ * EADAF 子 Scope。工位执行读写 IPS；工步和修理记录还没有对等的 IPS 实体，仍走 fmms。
  */
 export const EADAF_SCOPES = {
-  logistics: 'fmms/logistics',
-  production: 'fmms/production',
-  quality: 'fmms/quality',
-  service: 'fmms/service',
-  tooling: 'fmms/tooling',
+  logistics: 'IPS/logistics',
+  production: 'IPS/production',
+  inspection: 'IPS/inspection',
+  service: 'IPS/service',
+  master: 'IPS/master',
+  wbs: 'IPS/wbs',
+  fmmsProduction: 'fmms/production',
 } as const;
 
 /**
- * EADAF 业务数据 API routePath（fmms/{scope}/{Entity}，对齐 apis.json）
- * 集中管理，routePath 变化时只改这里
+ * EADAF 业务数据 API routePath。
+ * 已发布服务把操作写进路径：WorkCardFind / WorkCardCreate。
+ * 客户端用实体路径，再拼 EADAF_OPS。
  */
 export const EADAF_ROUTES = {
-  // 对齐 applications-public/FMMS/apis.json
+  bopInstance: `${EADAF_SCOPES.production}/BopInstance`,
+  workshopOrder: `${EADAF_SCOPES.production}/WorkshopOrder`,
+  bopScheme: 'IPS/process/BopScheme',
+  material: `${EADAF_SCOPES.master}/Material`,
   workCard: `${EADAF_SCOPES.production}/WorkCard`,
-  workstation: `${EADAF_SCOPES.tooling}/Workstation`,
-  wbsNode: `${EADAF_SCOPES.production}/WbsNode`,
-  inspectionItem: `${EADAF_SCOPES.quality}/InspectionItem`,
-  inspectionRecord: `${EADAF_SCOPES.quality}/InspectionRecord`,
-  measuringTool: `${EADAF_SCOPES.tooling}/MeasuringTool`,
+  workstation: `${EADAF_SCOPES.master}/Workstation`,
+  wbsNode: `${EADAF_SCOPES.wbs}/WbsNode`,
+  inspectionItem: `${EADAF_SCOPES.inspection}/InspectionItem`,
+  inspectionRecord: `${EADAF_SCOPES.inspection}/InspectionRecord`,
+  measuringTool: `${EADAF_SCOPES.master}/MeasurementEquipment`,
   lineStock: `${EADAF_SCOPES.logistics}/LineStock`,
   lineStockItem: `${EADAF_SCOPES.logistics}/LineStockItem`,
   workCardPart: `${EADAF_SCOPES.production}/WorkCardPart`,
-  outsourceOrder: `${EADAF_SCOPES.service}/OutsourceOrder`,
-  scrapRecord: `${EADAF_SCOPES.service}/ScrapRecord`,
+  outsourceOrder: `${EADAF_SCOPES.production}/WorkCardOutsourcing`,
+  scrapRecord: `${EADAF_SCOPES.production}/ScrapRecord`,
   inventoryTransaction: `${EADAF_SCOPES.logistics}/InventoryTransaction`,
+  callType: `${EADAF_SCOPES.service}/CallType`,
   notificationLog: `${EADAF_SCOPES.service}/NotificationLog`,
   trayTemplate: `${EADAF_SCOPES.logistics}/TrayTemplate`,
   traySlot: `${EADAF_SCOPES.logistics}/TraySlot`,
-  bop: `${EADAF_SCOPES.production}/Bop`,
-  workStep: `${EADAF_SCOPES.production}/WorkStep`,
+  bop: `${EADAF_SCOPES.fmmsProduction}/Bop`,
+  workStep: `${EADAF_SCOPES.fmmsProduction}/WorkStep`,
   agvTask: `${EADAF_SCOPES.service}/AgvTask`,
 } as const;
 
@@ -149,8 +156,9 @@ export const EADAF_OPS = {
 
 /**
  * 采集管道 routePath
+ * 工位回调仍由 BFF 接收，再转发到 IPS 检验记录管道。
  */
-export const INGEST_ROUTE = 'fmms/measurementIngest';
+export const INGEST_ROUTE = 'IPS/digital_measure';
 
 /**
  * WebSocket 事件类型

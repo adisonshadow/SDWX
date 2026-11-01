@@ -3,6 +3,8 @@
 > **用途**：本文档拆解故检修理线系统全部功能，按模块→功能项→优先级（P1 第一阶段 / P2 后续）逐项列出，并标注每项涉及的 EADAF 实体、BFF 接口、前端页面、验收标准。
 >
 > **优先级说明**：P1 = 第一阶段实现；P2 = 后续阶段（含占位）。
+>
+> **2026-11-01：** 表里的 EADAF 实体已改挂 IPS。工卡是 `IPS/production/WorkCard`，测量设备是 `IPS/master/MeasurementEquipment`，委外是 `IPS/production/WorkCardOutsourcing`（不再是 `OutsourceOrder`），线边和形迹盘在 `IPS/logistics`，呼叫和 AGV 在 `IPS/service`。采集入口是 `POST /api/collect/measurement`。工步和修理记录仍是 `fmms`。对照表见 `docs/EADAF数据结构设计-FMMS.md` 第 1 节。
 
 ---
 
@@ -31,9 +33,9 @@
 | 0.7 | 零部件清单（分组） | P1 | WorkCardPart | `GET /api/op/workcards/:id/parts` | PartBoard | 按类别分组（如缸体×1），逐件显示检测/处置状态 |
 | 0.8 | 零部件状态标识 | P1 | WorkCardPart.status | (同上) | PartBoard | 合格绿/不合格红/待处理灰；检测完成统计（N合格、M不合格） |
 | 0.9 | 扫码定位零件 | P1 | WorkCardPart.scan_barcode | (前端+扫码枪) | PartBoard | 扫码/输入条码自动定位高亮匹配零件 |
-| 0.10 | 测量工具注册管理 | P1 | MeasuringTool | `GET/POST /api/op/tools` | ToolStatus | 工具档案：编号/类型/协议/连接参数；新工具可注册 |
+| 0.10 | 测量工具注册管理 | P1 | MeasurementEquipment | `GET/POST /api/op/tools` | ToolStatus | 工具档案：编号/类型/协议/连接参数；新工具可注册 |
 | 0.11 | 多协议支持 | P1 | MeasuringTool.protocol | Electron collector | (采集服务) | serial / USB HID（P1）；Modbus RTU/TCP、TCP 自定义（预留） |
-| 0.12 | 自动数据采集 | P1 | InspectionRecord + ingest | `/api/op/ingest` + WS | InspectionBoard | 自动匹配工具，实时读取实测值填入检测表 |
+| 0.12 | 自动数据采集 | P1 | InspectionRecord + IPS/digital_measure | `POST /api/collect/measurement` | InspectionBoard | 自动匹配工具，实时读取实测值填入检测表 |
 | 0.13 | 自动判异 | P1 | InspectionRecord.result | (BFF/前端计算) | InspectionBoard | `nominal+lower ≤ 实测 ≤ nominal+upper` → 合格，否则不合格高亮 |
 | 0.14 | 手动输入/覆盖 | P1 | InspectionRecord | `POST /api/op/inspection` | InspectionBoard | 无工具/重测/特殊场景手动输入与判异覆盖 |
 | 0.15 | 检测图片管理 | P1 | InspectionRecord.photo_object_id | `/api/op/storage/upload` | InspectionBoard | 拍照绑定检测项/零件，预览重拍，随工卡归档 |
@@ -73,7 +75,7 @@
 | # | 功能项 | P | EADAF 实体 | BFF 接口 | 前端页面 | 验收标准 |
 |---|--------|---|-----------|---------|---------|---------|
 | 3.1 | 修理执行记录 | P1 | WorkStep + InspectionRecord | `POST /api/op/disposal/repair` | RepairBoard | 选修理方法、修理设备/工装，填修理过程与结论 |
-| 3.2 | 委外操作管理 | P1 | OutsourceOrder | `POST /api/op/outsource` | RepairBoard | 按物料属性自动识别委外件，可手动增删；提交生成委托单编码，按委外方拆多单，打印预览/批量打印 |
+| 3.2 | 委外操作管理 | P1 | WorkCardOutsourcing | `POST /api/op/outsource` | RepairBoard | 按物料属性自动识别委外件，可手动增删；提交生成委托单编码，按委外方拆多单，打印预览/批量打印 |
 | 3.3 | 报废登记 | P1 | ScrapRecord | `POST /api/op/scrap` | RepairBoard | 多选批量报废，可选原因/备注，关联线边报废账 |
 | 3.4 | 处置完成校验 | P1 | WorkCard | `POST /api/op/workcards/:id/submit` | RepairBoard | 全部零件有结果（修理/委外/报废）后"处置完成"按钮启用；提交→上报（Mock PCS 生成复检工卡） |
 
@@ -85,7 +87,7 @@
 |---|--------|---|-----------|---------|---------|---------|
 | 4.1 | 线边库分类管理 | P1 | LineStock + LineStockItem | `GET /api/op/inventory` | ReceiveBoard | 三类库存：待委外缓存/零件暂存/报废，分开记账统计 |
 | 4.2 | 出入库操作 | P1 | InventoryTransaction + LineStockItem | `POST /api/op/inventory/transaction` | ReceiveBoard | 扫载具/零件条码，选库存类型/库位，确认数量→出入库记账 |
-| 4.3 | 委外收发登记 | P1 | OutsourceOrder + InventoryTransaction | `POST /api/op/outsource/ship` `/return` | ReceiveBoard | 委外件发货+返回验收均在此登记；可暂存待复检或入立库 |
+| 4.3 | 委外收发登记 | P1 | WorkCardOutsourcing + InventoryTransaction | `POST /api/op/outsource/ship` `/return` | ReceiveBoard | 委外件发货+返回验收均在此登记；可暂存待复检或入立库 |
 | 4.4 | 立库交接 | P2 | (流程 P1，真实对接 P2) | — | ReceiveBoard | 合格件/委外完成件验收入立库缓存（P1 记账，真实立库对接 P2） |
 | 4.5 | 执行结果上报 | P1 | WorkCard | `POST /api/op/workcards/:id/submit` | ReceiveBoard | 收发工卡执行结果上报（Mock PCS）；线边出入库流水内部记录 |
 
@@ -98,7 +100,7 @@
 | 5.1 | 工艺视频客户端内播放 | P1 | WbsNode (processResources.url) | `/api/op/storage/preview` 或直链 | VideoPlayer | 视频 MP4(H.264) 在客户端内播放，不跳浏览器 |
 | 5.2 | 标签打印 | P1 | — | (前端打印) | PrintLabel | 分类条码/委外单标签打印（P1 用 webview window.print + HTML 模板） |
 | 5.3 | 双屏主副同步 | P1 | — | BroadcastChannel | OPShell | 主屏选工卡→副屏同步渲染对应工作台 |
-| 5.4 | 本地配置（服务器地址） | P1 | — | — | Electron ConfigPage | 配置 admin/frontend 地址、SSO 参数，热更新 webview |
+| 5.4 | 本地配置（服务器地址） | P1 | — | — | Electron ConfigPage | 配置 web/frontend 地址、SSO 参数，热更新 webview |
 | 5.5 | 工位选择/习惯持久化 | P1 | — | — | Electron store | 工位选择、用户操作习惯存本地（electron-store） |
 
 ---
@@ -120,8 +122,8 @@
 
 ## 数据来源说明（第一阶段）
 
-- **PCS 工卡**：Mock。种子数据写入 EADAF WorkCard（source=`mock`），BFF mockPCS 服务定时"分发"到各工位。
-- **WBS/检测项/零部件**：Mock 种子数据写入 EADAF 对应实体。
-- **检测数据**：真实采集链路（Electron→BFF→EADAF ingest）。
+- **工卡**：种子写入 IPS `WorkCard`（`pnpm --filter @fmms/web-bff seed`）。没有第二张 fmms 工卡，也没有复制钩子。
+- **WBS/检测项/零部件**：种子写入对应的 IPS 实体。工步仍写 `fmms/production/WorkStep`。
+- **检测数据**：适配程序 `POST /api/collect/measurement`，BFF 转发到 `IPS/digital_measure`。
 - **测量工具**：真实注册（扫描发现）或种子档案。
 - **文件/图片**：EADAF storage 真实存储。

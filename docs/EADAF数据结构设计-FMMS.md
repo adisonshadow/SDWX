@@ -1,16 +1,55 @@
-# EADAF 数据结构设计 — FMMS 故检修理管理系统
+# EADAF 数据结构设计 — 工位执行并入 IPS
 
-> **用途**：本文档定义 FMMS 在 EADAF 平台上的业务数据模型。其中 **§3 已有实体**直接复用；**§4 扩展字段**与 **§5 新建实体**为需在 EADAF 中补充/创建的内容（可用 EADAF AI 建模）。
+> **2026-11-01 起，工位执行不再使用 `fmms:*` 数据模型。** EADAF 上只保留 IPS 这一套实体和已发布 API。FMMS、IPS 仍是两个应用：排产用 IPS 应用，工位登录和采集回调用 FMMS 应用。FMMS 应用的数据范围已包含域 `IPS`，工位令牌可以直接调用 IPS 的 Find/Create/Update/Delete。
 >
-> **应用信息**：code = `FMMS`，application_id = `10000000-0001-4000-8000-000000000006`
-> **EADAF 开发地址**：`http://localhost:9527/`
-> **API 文档**：`http://localhost:9527/public/applications/FMMS/api-docs`
+> 本仓库目录由 `admin` 改为 `web`（`web/backend` 包名 `@fmms/web-bff`，`web/frontend` 包名 `@fmms/web`）。端口不变：BFF `5180`，工位页 `5181`。
+>
+> **应用**：FMMS，id `10000000-0001-4000-8000-000000000006`。EADAF API `http://localhost:29526`，管理台 `http://localhost:29527`。
+>
+> 下文 §3 起是并入之前的 `fmms` 字段设计，只作对照，不再按那些 routePath 写入。
+
+## 1. 现行实体
+
+工位 BFF 对页面仍返回原来的字段名。写入 EADAF 之前换成 IPS 的 camelCase。已发布服务的路径是 `/api/v1/data/{routePath}{Find|Create|Update|Delete}`。
+
+| 工位概念 | IPS routePath | 说明 |
+|----------|---------------|------|
+| 工卡 | `IPS/production/WorkCard` | 与排产同一张工卡。补了 `progress`、`qualifiedCount`、`unqualifiedCount`、`acceptOperatorName`、`stationType`、`wbsNodeId` |
+| 工位 | `IPS/master/Workstation` | 补了 `stationType`、`location`、`ipAddress`。`areaType` 写入 `FAULT_REPAIR`，工位五种类型写在 `stationType` |
+| WBS | `IPS/wbs/WbsNode` | 补了 `processName`、`processDescription`、`estimatedMinutes`、`workstationType` |
+| 检验项 | `IPS/inspection/InspectionItem` | 补了 `itemCode`、`partCode`、`wbsNodeId`、`measureToolCode`、`requirePhoto`、`inspectionMethod`、`qualityCriteria` |
+| 检验记录 | `IPS/inspection/InspectionRecord` | 补了 `photoObjectId`、`workCardId` |
+| 测量设备 | `IPS/master/MeasurementEquipment` | 连接参数在 `connectionParams`（JSON 文本） |
+| 工卡零件 | `IPS/production/WorkCardPart` | |
+| 委外 | `IPS/production/WorkCardOutsourcing` | 不再写 `fmms/service/OutsourceOrder`。补了 `orderNo`、`partCode`、`partName`、`quantity`、`operatorName` |
+| 报废 | `IPS/production/ScrapRecord` | |
+| 线边库 / 物料 / 流水 | `IPS/logistics/LineStock`、`LineStockItem`、`InventoryTransaction` | |
+| 形迹盘 | `IPS/logistics/TrayTemplate`、`TraySlot` | 槽位状态字段是 `slotStatus` |
+| 现场呼叫 | `IPS/service/NotificationLog` | 补了 `workstationId` |
+| AGV | `IPS/service/AgvTask` | |
+| 采集管道 | `IPS/digital_measure` | `POST /api/v1/ingest/IPS/digital_measure`，写入 IPS 检验记录 |
+
+工步（`fmms/production/WorkStep`）和修理记录（`fmms/production/Bop`）仍走原来的 `fmms` 接口。IPS 的工序实例还盖不住这两项。`fmms:*` 实体没有在这一步删除。
+
+页面状态和 IPS 枚举的对应：
+
+| 页面 | IPS |
+|------|-----|
+| 工卡 `pending` | `PENDING_ACCEPT`（读回时 `PENDING_REPAIR`、`PENDING_EFFECTIVE`、`KIT_SUSPENDED`、`LOAD_SUSPENDED` 也显示为待执行） |
+| 工卡 `in_progress` / `completed` / `cancelled` | `REPAIRING` / `REPAIR_DONE` / `CANCELLED` |
+| 委外 `created` | `ISSUED` |
+| 委外 `received` / `completed` / `cancelled` | `RETURNED` / `ACCEPTED` / `CANCELLED` |
+| 测量设备 `online` / `offline` | `normal` / `fault` |
+
+不再把 IPS 工卡复制到 `fmms/production/WorkCard`。`POST /api/hooks/ips-workcard` 和 `IPS_HOOK_TOKEN` 已去掉。派工就是 IPS 工卡变为可执行，工位直接改这张工卡。
+
+IPS 仓库的类型和路径在 `/Volumes/dev/SDQLJ_IPS/packages/shared/src/types.ts`、`routes.ts`。
 
 ---
 
-## 1. EADAF API 调用约定
+## 2. 调用约定（仍有效）
 
-### 1.1 routePath 规则
+### 2.0 routePath 规则
 每个实体自动生成 4 个 routePath，格式为 `{domain}/{Entity}{Operation}`：
 
 | 操作 | Operation 后缀 | HTTP 方法 | 路径 | 说明 |
@@ -22,12 +61,11 @@
 
 > ⚠️ 当前**无 `aggregate` 操作**；统计需 find 后客户端聚合或后续申请。
 
-### 1.2 命名规范
-- `production` / `equipment` 域：**snake_case**（如 `created_at`、`work_card_id`）
-- `wbs` 域：**camelCase**（如 `wbsCode`、`parentId`）
-- **本设计新增实体统一放入 `production` 域，使用 snake_case**，与已有 production 实体保持一致。
+### 2.1 命名
 
-### 1.3 调用方式
+IPS 主业务字段是 camelCase。工位页面和 BFF 对外接口仍用原来的字段名，只在 BFF 写 EADAF 时转换。不要下发 `created_at` / `updated_at`，这两项由平台填写。
+
+### 2.2 调用方式
 ```
 GET    /api/v1/data/{routePath}Find?limit=20&skip=0&status=in_progress
 POST   /api/v1/data/{routePath}Create                 body: { body: { ...字段 } }
@@ -36,14 +74,14 @@ DELETE /api/v1/data/{routePath}Delete/{id}
 Header: Authorization: Bearer {application_token}
 ```
 
-- **过滤**：优先使用顶层字段级参数（`?status=x&station_type=y`）；也支持 filter 对象（`filter={"status":"x"}`），但顶层参数优先级更高，如无必要尽量用顶层参数
-- Find 响应 `data`：执行报告形态 `{ preview: { count, items } }`（客户端兼容 `{items,total}` / 裸数组）
+- **过滤**：优先使用顶层字段级参数，字段名用 IPS 的 camelCase（例如 `?stationType=sorting&status=PENDING_ACCEPT`）。也支持 filter 对象，顶层参数优先级更高
+- Find 响应 `data`：`{ items, pagination }`。旧形态 `{ preview: { count, items } }` 不再作为现行约定
 - Create 响应 `data`：`{ item: { ...创建的记录 } }`
 - 删除请求无 body，`id` 仅通过 URL path 传递
 
 响应统一封装：`{ code: 200, message: "success", data: {...} }`
 
-### 1.4 文件存储
+### 2.3 文件存储
 - 上传：`POST /api/v1/storage/objects/upload`（multipart，字段 `bucketId` + `file`）→ 返回 objectId
 - 下载：`GET /api/v1/storage/objects/{objectId}/download`
 - 预览：`GET /api/v1/storage/objects/{objectId}/preview`
@@ -51,7 +89,11 @@ Header: Authorization: Bearer {application_token}
 
 ---
 
-## 2. 实体关系总览
+## 3. 并入前的 fmms 设计（不再写入）
+
+下面各节是 2026-11-01 之前按 `fmms`、snake_case 做的设计。对照用。现行实体和路径以本文开头的表为准。
+
+## 4. 当时规划的实体关系
 
 ```
 Workstation (工位)
@@ -79,7 +121,7 @@ NotificationLog (呼叫日志, 独立)
 
 ---
 
-## 3. 已有实体清单（直接复用，无需新建）
+## 旧 3. 已有实体清单（fmms，已停用）
 
 以下 11 个实体已在 EADAF 创建，FMMS 直接消费：
 
@@ -113,7 +155,7 @@ NotificationLog (呼叫日志, 独立)
 
 ---
 
-## 4. 已有实体扩展字段（请在 EADAF 给已有模型补充字段）
+## 旧 4. 曾计划补在 fmms 上的字段（已停用）
 
 ### 4.1 WorkCard（工卡）补充字段
 
@@ -164,7 +206,7 @@ NotificationLog (呼叫日志, 独立)
 
 ---
 
-## 5. 新建实体设计（9 个，请在 EADAF 创建）
+## 旧 5. 曾计划新建的 fmms 实体（已停用）
 
 > 均放入 `production` 域，snake_case 命名。每个实体 EADAF 自动生成 4 个 routePath。
 > 每个实体建议含 `id` (uuid 主键) + `created_at` / `updated_at` 时间戳。
@@ -252,24 +294,24 @@ NotificationLog (呼叫日志, 独立)
 
 ### 5.4 OutsourceOrder（委外单）
 
-**用途**：修理工位委外管理——委外零件按委外方拆单，生成委托单编码，支持打印。
+**用途**：修理或故检处置时，按零件生成委外单，并绑定来源工卡。
 
-| 字段名 | 类型 | 必填 | 默认值 | 枚举/说明 |
-|--------|------|------|--------|-----------|
-| `id` | uuid | ✅ | — | 主键 |
-| `order_no` | string | ✅ | — | 委托单编码（唯一，系统生成） |
-| `source_card_id` | uuid | ❌ | — | → WorkCard.id（来源工卡） |
-| `outsource_party` | string | ✅ | — | 委外方名称 |
-| `part_ids` | JSON | ❌ | `[]` | 零件 id 数组（string[]） |
-| `status` | enum | ✅ | `pending` | `pending`(待发) / `shipped`(已发) / `in_transit`(运输中) / `returned`(已返回) / `accepted`(已验收) |
-| `ship_date` | date | ❌ | — | 发货日期 |
-| `return_date` | date | ❌ | — | 返回日期 |
-| `operator` | string | ❌ | — | 经办人 |
-| `remark` | string | ❌ | — | 备注 |
-| `created_at` | datetime | ✅ | — | |
-| `updated_at` | datetime | ✅ | — | |
+| 字段名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| `id` | string | 平台生成 | 主键。创建时不要传入 |
+| `order_no` | string | ✅ | 委托单编号。BFF 生成 |
+| `workCardId` | string | ❌ | 来源工卡 id。按工卡查询用这个字段 |
+| `outsource_company` | string | ❌ | 委外方 |
+| `outsource_status` | string | ✅ | 当前写入 `created` |
+| `part_code` | string | ✅ | 零件编码 |
+| `part_name` | string | ❌ | 零件名称 |
+| `quantity` | number | ✅ | 数量 |
+| `operator_id` | string | ❌ | 经办人 id |
+| `operator_name` | string | ❌ | 经办人姓名 |
+| `remark` | string | ❌ | 备注 |
+| `created_at` / `updated_at` | datetime | 平台填写 | 系统字段，请求里不要带 |
 
-**routePath**：`production/OutsourceOrder{Find|Create|Update|Delete}`
+**routePath**：`fmms/service/OutsourceOrder{Find|Create|Update|Delete}`
 
 ---
 
@@ -383,73 +425,6 @@ NotificationLog (呼叫日志, 独立)
 
 ---
 
-## 6. 采集管道配置（EADAF 侧非实体配置）
+## 6. 旧 routePath 表已作废
 
-### 6.1 创建采集管道
-- **routePath**：`fmms/measurementIngest`（建议命名）
-- **用途**：接收 Electron 采集服务转发的测量工具原始数据帧（经 BFF）
-- **接入方式**：`POST /api/v1/ingest/fmms/measurementIngest`
-- **Content-Type**：`application/octet-stream`（原始字节）或 `application/json`
-- **大小限制**：单次 ≤ 1MB（超限 BFF 分批）
-- **allowlist**：将应用 id `10000000-0001-4000-8000-000000000006` 加入允许列表
-
-### 6.2 业务 API 访问策略
-- 确认 `production/*` 所有服务访问策略为**「无限制」**（否则 application token 调用返回 403）
-
-### 6.3 应用 Token 引导
-- 确认 `POST /api/v1/applications/token`（app_id + app_secret 换 JWT）可用方式：
-  - 方式 A：该端点已放开（无需已有 token）
-  - 方式 B：管理员提供一次性引导 token
-- token 默认有效期 24h，BFF 会缓存并在过期前 ~5min 自动刷新
-
----
-
-## 7. 完整 routePath 速查表
-
-### 已有实体（复用）
-| 实体 | Find | Create | Update | Delete |
-|------|------|--------|--------|--------|
-| WorkCard | `production/WorkCardFind` | `production/WorkCardCreate` | `production/WorkCardUpdate` | `production/WorkCardDelete` |
-| WorkStep | `production/WorkStepFind` | ... | ... | ... |
-| InspectionItem | `quality/InspectionItemFind` | `quality/InspectionItemCreate` | `quality/InspectionItemUpdate` | `quality/InspectionItemDelete` |
-| InspectionRecord | `quality/InspectionRecordFind` | `quality/InspectionRecordCreate` | `quality/InspectionRecordUpdate` | `quality/InspectionRecordDelete` |
-| MeasuringTool | `production/MeasuringToolFind` | ... | ... | ... |
-| LineStock | `production/LineStockFind` | ... | ... | ... |
-| LineStockItem | `production/LineStockItemFind` | ... | ... | ... |
-| Equipment | `equipment/EquipmentFind` | ... | ... | ... |
-| Maintenance | `equipment/MaintenanceFind` | ... | ... | ... |
-| RunLog | `equipment/RunLogFind` | ... | ... | ... |
-| Node | `wbs/NodeFind` | `wbs/NodeCreate` | `wbs/NodeUpdate` | `wbs/NodeDelete` |
-| DataHistory | `wbs/DataHistoryFind` | ... | ... | ... |
-
-### 新建实体（待 EADAF 创建）
-| 实体 | Find | Create | Update | Delete |
-|------|------|--------|--------|--------|
-| Workstation | `production/WorkstationFind` | `production/WorkstationCreate` | `production/WorkstationUpdate` | `production/WorkstationDelete` |
-| WorkCardPart | `production/WorkCardPartFind` | `production/WorkCardPartCreate` | `production/WorkCardPartUpdate` | `production/WorkCardPartDelete` |
-| OutsourceOrder | `production/OutsourceOrderFind` | `production/OutsourceOrderCreate` | `production/OutsourceOrderUpdate` | `production/OutsourceOrderDelete` |
-| ScrapRecord | `production/ScrapRecordFind` | `production/ScrapRecordCreate` | `production/ScrapRecordUpdate` | `production/ScrapRecordDelete` |
-| InventoryTransaction | `production/InventoryTransactionFind` | `production/InventoryTransactionCreate` | `production/InventoryTransactionUpdate` | `production/InventoryTransactionDelete` |
-| NotificationLog | `production/NotificationLogFind` | `production/NotificationLogCreate` | `production/NotificationLogUpdate` | `production/NotificationLogDelete` |
-| TrayTemplate | `production/TrayTemplateFind` | `production/TrayTemplateCreate` | `production/TrayTemplateUpdate` | `production/TrayTemplateDelete` |
-| TraySlot | `production/TraySlotFind` | `production/TraySlotCreate` | `production/TraySlotUpdate` | `production/TraySlotDelete` |
-
-### 采集管道
-| 用途 | routePath | 方法 |
-|------|-----------|------|
-| 测量数据采集 | `fmms/measurementIngest` | POST |
-
----
-
-## 8. 待确认事项
-
-| # | 事项 | 影响 |
-|---|------|------|
-| 1 | §4 扩展字段补充后字段名/类型是否与本文一致 | 代码层 repository 适配 |
-| 2 | §5 新建实体命名（Workstation/WorkCardPart/InspectionItem 等）是否被 EADAF 接受 | routePath 命名 |
-| 3 | `updateOne`/`Update` 操作是否支持单次多字段更新（当前语义为 `{id, field, set}` 单字段） | 批量更新场景需多次调用 |
-| 4 | 业务 API 是否支持写操作（create 已确认支持） | 工卡接受/结果上报等写场景 |
-| 5 | 采集管道 allowlist 是否已加入 FMMS 应用 | Electron 采集链路 |
-| 6 | `production/*` 服务访问策略是否为「无限制」 | application token 调用是否 403 |
-| 7 | `/api/v1/applications/token` 引导方式 | BFF 启动取 token |
-| 8 | SSO 登出流程（当前 SSO 文档未覆盖） | 登出实现 |
+上面旧 3 至旧 5 里的 `production/`、`fmms/quality/`、`fmms/measurementIngest` 都不要再调用。现行路径、字段和状态枚举以本文第 1 节为准。采集入口是 `POST /api/v1/ingest/IPS/digital_measure`。应用令牌用 `POST /api/v1/applications/token`。
